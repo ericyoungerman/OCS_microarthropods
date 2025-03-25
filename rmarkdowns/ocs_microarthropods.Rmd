@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Ocs microarthropods"
 output: github_document
 ---
 
@@ -33,10 +33,10 @@ library(performance)
 ## Load data
 
 ``` {r}
-ocs_invertebrates_raw <- read_excel("~/Github/OCS-microinvertebrates/ocs_invertebrates_kg.xlsx")
+ocs_invertebrates_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_invertebrates_kg.xlsx")
 ocs_invertebrates_raw$block <- as.factor(ocs_invertebrates_raw$block)
 ocs_invertebrates_raw$entry <- as.factor(ocs_invertebrates_raw$entry)
-ocs_invertebrates_raw$treatments <- as.factor(ocs_invertebrates_raw$treatments)
+ocs_invertebrates_raw$system <- as.factor(ocs_invertebrates_raw$system)
 ocs_invertebrates_raw <- ocs_invertebrates_raw |> 
   mutate(across(where(is.numeric), round))
 
@@ -50,7 +50,7 @@ kable(head(ocs_invertebrates_raw))
 ```{r}
  #Filter relevant data (we can't use data from alley and corn)
 ocs_invertebrates_clean <- ocs_invertebrates_raw |>  
-  filter(treatments %in% c("HF", "LF", "EWM", "RT"))
+  filter(system %in% c("HF", "LF", "EWM", "RT"))
 
 # Display cleaned dataset
 kable(head(ocs_invertebrates_clean))
@@ -65,7 +65,7 @@ kable(head(ocs_invertebrates_clean))
 test_glmm_models <- function(response_var, data) {
   
   # Define model formulas
-  formula <- as.formula(paste(response_var, "~ treatments * entry + block + (1 | block:treatments)"))
+  formula <- as.formula(paste(response_var, "~ system * entry + block + (1 | block:system)"))
   
   # Fit models with different distributions
   models <- list(
@@ -111,12 +111,33 @@ models_total_organisms <- test_glmm_models("total_organisms", ocs_invertebrates_
 ####Anova (almost significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
-total_organisms.binom1.anova <- test_terms(formula = total_organisms ~ treatments * entry + block, # fixed effects go here
+total_organisms.binom1.anova <- test_terms(formula = total_organisms ~ system * entry + block, # fixed effects go here
                                            data = ocs_invertebrates_clean,
-                                           extra_formula = ~ (1|block:treatments), # random effects go here
+                                           extra_formula = ~ (1|block:system), # random effects go here
                                            fit_fun = glmmTMB,
                                            fit_arg = list(family=nbinom1(link="log"))); total_organisms.binom1.anova # put the family you decided on in the fit_arg
 ```
+<br>
+
+####post-hoc
+```{r}
+# Perform post-hoc analysis using emmeans if indicated by the ANOVA  
+total_organisms.emm <- emmeans(models_total_organisms$binom1, ~system, type="response")
+
+# Run pairwise comparisons with Tukey adjustment
+tukey_results <- pairs(total_organisms.emm, adjust = "tukey")
+print(tukey_results)  # Check the pairwise comparisons
+
+# Generate CLD output with Tukey adjustment
+library(multcompView)
+cld_total_organisms <- cld(total_organisms.emm, Letters = letters, adjust = "tukey", sort = TRUE, reversed = TRUE)
+
+# Print the CLD results
+print(cld_total_organisms)
+```
+
+<br>
+
 ###total_collembola
 
 ```{r}
@@ -126,14 +147,15 @@ models_total_collembola <- test_glmm_models("total_collembola", ocs_invertebrate
 ####Anova (not significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
-total_collembola.binom1.anova <- test_terms(formula = total_collembola ~ treatments * entry + block, # fixed effects go here
+total_collembola.binom1.anova <- test_terms(formula = total_collembola ~ system * entry + block, # fixed effects go here
                                            data = ocs_invertebrates_clean,
-                                           extra_formula = ~ (1|block:treatments), # random effects go here
+                                           extra_formula = ~ (1|block:system), # random effects go here
                                            fit_fun = glmmTMB,
                                            fit_arg = list(family=nbinom1(link="log"))); total_collembola.binom1.anova # put the family you decided on in the fit_arg
 ```
+<br>
 
-#####entomobryidae To little data (no models are converging)
+###entomobryidae (no models are converging)
 ```{r}
 models_entomobryidae <- test_glmm_models("entomobryidae", ocs_invertebrates_clean)
 
@@ -141,15 +163,17 @@ sum(ocs_invertebrates_clean$entomobryidae == 0)  # Observed zeros
 sum(sim_zeros$simulatedResponse == 0)  # Simulated zeros under NB model
 ```
 
-#####isotomidae (not significant)
+<br>
+
+###isotomidae 
 ```{r}
 models_isotomidae <- test_glmm_models("isotomidae", ocs_invertebrates_clean)
 
 ```
 
+<br>
 
-
-######anova (not significant)
+####anova (not significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
 isotomidae.binom1.anova <- test_terms(formula = isotomidae ~ treatments * entry + block, # fixed effects go here
@@ -158,7 +182,10 @@ isotomidae.binom1.anova <- test_terms(formula = isotomidae ~ treatments * entry 
                                            fit_fun = glmmTMB,
                                            fit_arg = list(family=nbinom1(link="log"))); isotomidae.binom1.anova # put the family you decided on in the fit_arg
 ```
-#####onychiuridae (treatment is significant)
+
+<br>
+
+###onychiuridae (treatment is significant)
 ```{r}
 models_onychiuridae  <- test_glmm_models("onychiuridae ", ocs_invertebrates_clean)
 
@@ -194,6 +221,8 @@ onychiuridae.tweedie.anova <- test_terms(formula = onychiuridae ~ treatments * e
                                            fit_fun = glmmTMB,
                                            fit_arg = list(family=tweedie(link="log"))); onychiuridae.tweedie.anova # put the family you decided on in the fit_arg
 ```
+
+######post-hoc
 ```{r}
 # Then move on to post-hoc using emmeans if indicated by the ANOVA. 
 onychiuridae.emm <- emmeans(onychiuridae.tweedie, ~treatments, type="response"); pwpm(onychiuridae.emm , adjust="none")
