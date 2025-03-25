@@ -1,0 +1,392 @@
+---
+title: "OCS soil health analysis"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+
+```{r message=FALSE, warning=FALSE}
+
+#Load packages 
+library(tidyverse) ##install.packages("tidyverse")
+library(knitr)
+library(patchwork) ##install.packages("patchwork")
+library(skimr)     ##install.packages("skimr")
+library(readxl)
+library(janitor) ##install.packages("janitor")
+library(kableExtra) ##install.packages("kableExtra")
+library(viridis) ##install.packages("viridis")
+library(lme4) ##install.packages("lme4")
+library(lmerTest) ##install.packages("lmerTest")
+library(emmeans) ##install.packages("emmeans")
+library(rstatix) ##install.packages("rstatix")
+#library(Matrix) ##install.packages("Matrix")
+library(multcomp) ##install.packages("multcomp")
+library(multcompView) ##install.packages("multcompView")
+library(ggResidpanel) ##install.packages("ggResidpanel")
+#library(car)
+#library(TMB)  ##install.packages("TMB")
+library(WrensBookshelf)##install.packages("WrensBookshelf")
+library(magrittr)
+library(grid)
+library(hues) ##install.packages("hues")
+library(vegan) ##install.packages("vegan")
+library(permute)
+library(ggrepel) ##install.packages("ggrepel")
+library(ggordiplots) ##install.packages("ggordiplots")
+library(FD) ##install.packages("FD")
+library(ade4)
+library(gawdis)  ##install.packages("gawdis")
+## For GLM modeling
+install.packages("devtools")  # Install devtools if not already installed
+library(devtools)  
+install_github("singmann/monet")  # Install monet from GitHub
+library(monet)  # Load the package
+library(glmmTMB)  ##install.packages("glmmTMB")
+library(DHARMa)  ##install.packages("DHARMa")
+library(performance) ##install.packages("performance")
+library(corrplot) # for testing species x CWM
+#library(Hmisc) # for testing species x CWM
+library(broom.mixed) ##install.packages("broom.mixed")
+library(purrr)  # ##install.packages("purr")
+
+#Load Functions
+MeanPlusSe<-function(x) mean(x)+plotrix::std.error(x)
+
+find_logw0=function(x){c=trunc(log(min(x[x>0],na.rm=T)))
+d=exp(c)
+return(d)}
+```
+
+<br>
+
+# Load and clean data
+
+## Load data
+
+``` {r}
+ocs_soil_health_raw <- read_excel("~/Github/OCS-microinvertebrates/ocs_soil_health_2022.xlsx")
+ocs_soil_health_raw$block <- as.factor(ocs_soil_health_raw$block)
+ocs_soil_health_raw$entry <- as.factor(ocs_soil_health_raw$entry)
+ocs_soil_health_raw$treatments <- as.factor(ocs_soil_health_raw$treatments)
+
+
+
+kable(head(ocs_soil_health_raw))
+
+```
+
+##Clean data
+
+```{r}
+ #Filter relevant data (we can't use data from alley and corn)
+ocs_soil_health_clean <- ocs_soil_health_raw |>  
+  filter(treatments %in% c("HF", "LF", "EWM", "RT"))
+
+# Display cleaned dataset
+kable(head(ocs_soil_health_clean))
+
+
+```
+#Model testing
+##pred_water_capacity
+```{r}
+pred_water_capacity.gauss<- glmmTMB(pred_water_capacity~ treatments * entry + block + (1 | block:treatments),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+pred_water_capacity.gamma <- glmmTMB(pred_water_capacity ~ treatments * entry + block + (1 | block:treatments),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+#look at the AIC
+AIC(pred_water_capacity.gauss,pred_water_capacity.gamma )
+logLik(pred_water_capacity.gamma)
+
+ocs_soil_health_clean <- ocs_soil_health_clean |> 
+  mutate(pred_water_capacity_scaled = pred_water_capacity * 100)
+
+pred_water_capacity.gauss <- glmmTMB(pred_water_capacity_scaled ~ treatments * entry + block + (1 | block:treatments),
+                                     data = ocs_soil_health_clean,
+                                      family = gaussian())
+
+AIC(pred_water_capacity.gauss) 
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(pred_water_capacity.gauss,plot = TRUE) 
+
+check_model(pred_water_capacity.gauss)
+
+
+```
+
+###monet annova 
+###not significant
+```{r}
+# `test_terms` is from monet and allows for a Type III anova for glmmTMB
+pred_water_capacity.gauss.anova <- test_terms(formula = pred_water_capacity~ treatments * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:treatments), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = gaussian())); pred_water_capacity.gauss.anova  # put the family you decided on in the fit_arg
+```
+
+##surface_hardness
+```{r}
+surface_hardness.gauss<- glmmTMB(surface_hardness~ treatments * entry + block + (1 | block:treatments),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+surface_hardness.gamma <- glmmTMB(surface_hardness~ treatments * entry + block + (1 | block:treatments),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+#look at the AIC
+AIC(surface_hardness.gauss,surface_hardness.gamma )
+
+
+ocs_soil_health_clean <- ocs_soil_health_clean |> 
+  mutate(pred_water_capacity_scaled = pred_water_capacity * 100)
+
+pred_water_capacity.gauss <- glmmTMB(pred_water_capacity_scaled ~ treatments * entry + block + (1 | block:treatments),
+                                     data = ocs_soil_health_clean,
+                                      family = gaussian())
+
+AIC(pred_water_capacity.gauss) 
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(surface_hardness.gamma,plot = TRUE) 
+
+check_model(surface_hardness.gamma)
+
+
+```
+
+###monet annova 
+###significant
+
+```{r}
+#`test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+surface_hardness.gamma.anova <- test_terms(formula = surface_hardness~ treatments * entry +block, #fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:treatments), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(Gamma(link = "log"))); surface_hardness.gamma.anova  # put the family you decided on in the fit_arg
+```
+
+```{r}
+# Then move on to post-hoc using emmeans if indicated by the ANOVA. The example below would be used if the System term
+# alone was significant.
+surface_hardness.emm <- emmeans(surface_hardness.gamma, ~treatments|entry, type="response"); pwpm(surface_hardness.emm , adjust="none")
+
+
+```
+```{r}
+# Compute estimated marginal means for treatments within each entry
+surface_hardness.emm <- emmeans(surface_hardness.gamma, ~treatments | entry, type = "response")
+
+# Generate CLD output
+cld_surface_hardness <- cld(surface_hardness.emm, Letters = letters, adjust = "none", sort = TRUE, reversed = TRUE)
+
+# Print the results
+cld_surface_hardness
+
+```
+##subsurface_hardness
+```{r}
+subsurface_hardness.gauss<- glmmTMB(subsurface_hardness~ treatments * entry + block + (1 | block:treatments),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+subsurface_hardness.gamma <- glmmTMB(subsurface_hardness~ treatments * entry + block + (1 | block:treatments),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+#look at the AIC
+AIC(subsurface_hardness.gauss,subsurface_hardness.gamma )
+
+
+ocs_soil_health_clean <- ocs_soil_health_clean |> 
+  mutate(pred_water_capacity_scaled = pred_water_capacity * 100)
+
+pred_water_capacity.gauss <- glmmTMB(pred_water_capacity_scaled ~ treatments * entry + block + (1 | block:treatments),
+                                     data = ocs_soil_health_clean,
+                                      family = gaussian())
+
+AIC(pred_water_capacity.gauss) 
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(subsurface_hardness.gamma,plot = TRUE) 
+
+check_model(subsurface_hardness.gamma)
+
+
+```
+###monet annova 
+###significant
+
+```{r}
+#`test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+subsurface_hardness.gamma.anova <- test_terms(formula = subsurface_hardness~ treatments * entry +block, #fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:treatments), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(Gamma(link = "log"))); subsurface_hardness.gamma.anova  # put the family you decided on in the fit_arg
+```
+```{r}
+# Then move on to post-hoc using emmeans if indicated by the ANOVA. The example below would be used if the System term
+# alone was significant.
+subsurface_hardness.emm <- emmeans(subsurface_hardness.gamma, ~treatments|entry, type="response"); pwpm(subsurface_hardness.emm , adjust="none")
+
+
+```
+```{r}
+# Compute estimated marginal means for treatments within each entry
+subsurface_hardness.emm <- emmeans(subsurface_hardness.gamma, ~treatments | entry, type = "response")
+
+# Generate CLD output
+cld_subsurface_hardness <- cld(subsurface_hardness.emm, Letters = letters, adjust = "none", sort = TRUE, reversed = TRUE)
+
+# Print the results
+cld_subsurface_hardness
+
+```
+# organic_matter(is a percentage)
+```{r}
+
+
+
+organic_matter.beta <- glmmTMB(organic_matter / 100 ~ treatments * entry + block + (1 | block:treatments),
+                                    data = ocs_soil_health_clean,
+                                    family = beta_family())
+
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(organic_matter.beta,plot = TRUE) 
+
+check_model(organic_matter.beta)
+
+
+```
+###monet annova 
+###Not significant
+
+```{r}
+#`test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+# Scale organic matter percentage to (0,1)
+ocs_soil_health_clean$organic_matter_scaled <- ocs_soil_health_clean$organic_matter / 100
+
+# Fit beta regression
+organic_matter.beta.anova <- test_terms(
+  formula = organic_matter_scaled ~ treatments * entry + block,  # Fixed effects
+  data = ocs_soil_health_clean,
+  extra_formula = ~ (1|block:treatments),  # Random effects
+  fit_fun = glmmTMB,
+  fit_arg = list(family = beta_family())
+)
+
+organic_matter.beta.anova
+```
+
+##pred_soil_protein
+```{r}
+pred_soil_protein.gauss<- glmmTMB(pred_soil_protein~ treatments * entry + block + (1 | block:treatments),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+
+
+
+
+pred_soil_protein.gamma <- glmmTMB(pred_soil_protein~ treatments * entry + block + (1 | block:treatments),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+
+#look at the AIC
+AIC(pred_soil_protein.gauss,pred_soil_protein.gamma )
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(pred_soil_protein.gamma,plot = TRUE) 
+
+check_model(pred_soil_protein.gamma)
+
+
+```
+###monet annova 
+### Notsignificant
+
+```{r}
+#`test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+pred_soil_protein.gamma.anova <- test_terms(formula = pred_soil_protein~ treatments * entry +block, #fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:treatments), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(Gamma(link = "log"))); pred_soil_protein.gamma.anova # put the family you decided on in the fit_arg
+```
+
+
+
+
+
+#Loop attempt
+
+```{r}
+## Select column names from soil_texture_sand to overall_score
+soil_health_params <- names(ocs_soil_health_clean)[8:45]
+
+# Create an empty list to store model results
+soil_health_models <- list()
+
+# Loop through each soil health parameter and fit the model
+for (param in soil_health_params) {
+  formula <- as.formula(paste(param, "~ treatments * entry + block + (1 | block:treatments)"))
+  
+  # Fit the model
+  soil_health_models[[param]] <- glmmTMB(formula, 
+                                         data = ocs_soil_health_clean, 
+                                         family = gaussian())
+}
+
+# Print summaries for all models
+walk2(soil_health_models, names(soil_health_models), ~ {
+  cat("\n*** Summary for:", .y, "***\n")
+  print(summary(.x))
+})
+
+```
+
+
+
+
+### Joint test (anova)
+```{r}
+glmm_ja |> 
+  joint_tests() |> 
+  kable()  
+```
+
+### Fisher compact letter display
+####  treatments (significant)
+
+```{r}
+cld_treatments_fisher <-cld(emmeans(glmm_ja, ~  treatments , type = "response"), Letters = letters, adjust = "none",sort = TRUE, reversed=TRUE)
+cld_treatments_fisher 
+```

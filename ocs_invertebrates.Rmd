@@ -1,0 +1,602 @@
+---
+title: "Untitled"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load libraries
+
+```{r message=FALSE, warning=FALSE}
+
+library(tidyverse)
+library(multcomp)
+library(emmeans)
+library(knitr)
+library(patchwork) ##install.packages("patchwork")
+library(skimr)     ##install.packages("skimr")
+library(readxl)
+library(janitor) ##install.packages("janitor")
+library(kableExtra) ##install.packages("kableExtra")
+library(WrensBookshelf)##install.packages("WrensBookshelf")
+## For GLM modeling
+library(monet)
+library(DHARMa)
+library(glmmTMB)
+library(performance)
+```
+
+# Load and clean data
+
+## Load data
+
+``` {r}
+ocs_invertebrates_raw <- read_excel("~/Github/OCS-microinvertebrates/ocs_invertebrates_kg.xlsx")
+ocs_invertebrates_raw$block <- as.factor(ocs_invertebrates_raw$block)
+ocs_invertebrates_raw$entry <- as.factor(ocs_invertebrates_raw$entry)
+ocs_invertebrates_raw$treatments <- as.factor(ocs_invertebrates_raw$treatments)
+ocs_invertebrates_raw <- ocs_invertebrates_raw |> 
+  mutate(across(where(is.numeric), round))
+
+
+kable(head(ocs_invertebrates_raw))
+
+```
+
+##Clean data
+
+```{r}
+ #Filter relevant data (we can't use data from alley and corn)
+ocs_invertebrates_clean <- ocs_invertebrates_raw |>  
+  filter(treatments %in% c("HF", "LF", "EWM", "RT"))
+
+# Display cleaned dataset
+kable(head(ocs_invertebrates_clean))
+
+
+```
+
+##Model testing
+
+```{r}
+# Function to fit models and run diagnostics for a given response variable
+test_glmm_models <- function(response_var, data) {
+  
+  # Define model formulas
+  formula <- as.formula(paste(response_var, "~ treatments * entry + block + (1 | block:treatments)"))
+  
+  # Fit models with different distributions
+  models <- list(
+    binom1 = glmmTMB(formula, family = nbinom1(link = "log"), data = data),
+    binom2 = glmmTMB(formula, family = nbinom2(link = "log"), data = data),
+    poiss = glmmTMB(formula, family = poisson(link = "log"), data = data),
+    tweedie = glmmTMB(formula, family = tweedie(link = "log"), data = data),
+    zi = glmmTMB(formula, family = nbinom1(link = "log"), ziformula = ~ 1, data = data)
+  )
+
+  # Overdispersion check (using nbinom1)
+  resid_pearson <- residuals(models$binom1, type = "pearson")
+  dispersion_ratio <- sum(resid_pearson^2) / df.residual(models$binom1)
+  cat("\n--- Overdispersion Check for", response_var, "---\n")
+  cat("Dispersion Ratio:", round(dispersion_ratio, 2), "\n")
+  
+  # Zero inflation test
+  sim_residuals <- simulateResiduals(models$binom1)
+  zi_test <- testZeroInflation(sim_residuals)
+  cat("Zero Inflation Test p-value:", zi_test$p.value, "\n")
+  
+  # Compare models using AIC
+  aic_results <- AIC(models$binom1, models$binom2, models$poiss, models$tweedie, models$zi)
+  print(aic_results)
+
+  # Plot residual diagnostics
+  plot(sim_residuals)
+  
+  # Check model fit visually
+  check_model(models$binom1)  # Works with `performance` package
+  
+  return(models)  # Return models in case you want to use them later
+}
+
+```
+###total_organisms
+
+```{r}
+models_total_organisms <- test_glmm_models("total_organisms", ocs_invertebrates_clean)
+
+```
+
+####Anova (almost significant)
+```{r}
+# `test_terms` is from monet and allows for a Type III anova for glmmTMB
+total_organisms.binom1.anova <- test_terms(formula = total_organisms ~ treatments * entry + block, # fixed effects go here
+                                           data = ocs_invertebrates_clean,
+                                           extra_formula = ~ (1|block:treatments), # random effects go here
+                                           fit_fun = glmmTMB,
+                                           fit_arg = list(family=nbinom1(link="log"))); total_organisms.binom1.anova # put the family you decided on in the fit_arg
+```
+###total_collembola
+
+```{r}
+models_total_collembola <- test_glmm_models("total_collembola", ocs_invertebrates_clean)
+
+```
+####Anova (not significant)
+```{r}
+# `test_terms` is from monet and allows for a Type III anova for glmmTMB
+total_collembola.binom1.anova <- test_terms(formula = total_collembola ~ treatments * entry + block, # fixed effects go here
+                                           data = ocs_invertebrates_clean,
+                                           extra_formula = ~ (1|block:treatments), # random effects go here
+                                           fit_fun = glmmTMB,
+                                           fit_arg = list(family=nbinom1(link="log"))); total_collembola.binom1.anova # put the family you decided on in the fit_arg
+```
+
+#####entomobryidae To little data (no models are converging)
+```{r}
+models_entomobryidae <- test_glmm_models("entomobryidae", ocs_invertebrates_clean)
+
+sum(ocs_invertebrates_clean$entomobryidae == 0)  # Observed zeros
+sum(sim_zeros$simulatedResponse == 0)  # Simulated zeros under NB model
+```
+
+#####isotomidae (not significant)
+```{r}
+models_isotomidae <- test_glmm_models("isotomidae", ocs_invertebrates_clean)
+
+```
+
+
+
+######anova (not significant)
+```{r}
+# `test_terms` is from monet and allows for a Type III anova for glmmTMB
+isotomidae.binom1.anova <- test_terms(formula = isotomidae ~ treatments * entry + block, # fixed effects go here
+                                           data = ocs_invertebrates_clean,
+                                           extra_formula = ~ (1|block:treatments), # random effects go here
+                                           fit_fun = glmmTMB,
+                                           fit_arg = list(family=nbinom1(link="log"))); isotomidae.binom1.anova # put the family you decided on in the fit_arg
+```
+#####onychiuridae (treatment is significant)
+```{r}
+models_onychiuridae  <- test_glmm_models("onychiuridae ", ocs_invertebrates_clean)
+
+onychiuridae.tweedie <- glmmTMB(
+ onychiuridae ~ treatments * entry + block + (1 | block:treatments),
+  family = tweedie(link = "log"),
+  data = ocs_invertebrates_clean
+)
+
+onychiuridae_zi <- glmmTMB(
+  onychiuridae ~ treatments * entry + block + (1 | block:treatments),
+  family = nbinom1(link = "log"),
+  ziformula = ~ 1,  # Tests if zero inflation is needed
+  data = ocs_invertebrates_clean
+)
+
+# Diagnostic residual plots (for best model selection)
+res.onychiuridae <- simulateResiduals(onychiuridae.tweedie, n = 1000, integerResponse = FALSE)
+plot(res.onychiuridae)
+
+# Check overall model fit visually
+check_model(onychiuridae.tweedie)  # Works with `performance` package
+
+```
+
+
+######anova (significant)
+```{r}
+# `test_terms` is from monet and allows for a Type III anova for glmmTMB
+onychiuridae.tweedie.anova <- test_terms(formula = onychiuridae ~ treatments * entry + block, # fixed effects go here
+                                           data = ocs_invertebrates_clean,
+                                           extra_formula = ~ (1|block:treatments), # random effects go here
+                                           fit_fun = glmmTMB,
+                                           fit_arg = list(family=tweedie(link="log"))); onychiuridae.tweedie.anova # put the family you decided on in the fit_arg
+```
+```{r}
+# Then move on to post-hoc using emmeans if indicated by the ANOVA. 
+onychiuridae.emm <- emmeans(onychiuridae.tweedie, ~treatments, type="response"); pwpm(onychiuridae.emm , adjust="none")
+
+# Generate CLD output
+cld_onychiuridae <- cld(onychiuridae.emm, Letters = letters, adjust = "none", sort = TRUE, reversed = TRUE)
+
+# Print the results
+cld_onychiuridae
+
+
+
+```
+
+```{r message=FALSE}
+ocs_invertebrates_clean |> 
+  left_join(cld_onychiuridae) |> 
+  ggplot(aes(x = factor(treatments, levels = c("HF", "LF", "EWM", "RT")), 
+             y = response, fill = treatments)) +
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  geom_errorbar(aes(ymin = response - SE, ymax = response + SE), 
+                width = 0.2, position = position_dodge(0.9)) +
+  geom_text(aes(label = trimws(.group), y = response + SE + 0.75), 
+            size = 7) +
+  labs(
+    x = "",
+    y = expression("Density" ~ (individuals ~ kg^{-1} ~ "dry soil")),
+    subtitle = expression(italic("P < 0.05"))
+  ) +
+  scale_x_discrete(labels = c("High\nfertility", "Low\nfertility", 
+                              "Enhanced\nweed\nmanagement", "Reduced\ntillage")) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.3))) +
+  scale_fill_WB_d(name = "BlueberriesForSal", direction = 1) +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 12),
+    axis.title = element_text(size = 24),
+    axis.text = element_text(size = 16),
+    plot.subtitle = element_text(size = 24, face = "italic")
+  )
+ggsave("onychiuridae_kg.png", width = 10, height = 6, dpi = 300)
+```
+#####sminthuridae (not enough data)
+```{r}
+models_sminthuridae <- test_glmm_models("sminthuridae", ocs_invertebrates_clean)
+
+# Diagnostic residual plots (for best model selection)
+res.onychiuridae <- simulateResiduals(onychiuridae.tweedie, n = 1000, integerResponse = FALSE)
+plot(res.onychiuridae)
+
+# Check overall model fit visually
+check_model(onychiuridae.tweedie)  # Works with `performance` package
+
+```
+
+
+
+
+
+###total_mites, low zero inflation, treatment by entry is significant!
+```{r}
+models_total_mites <- test_glmm_models("total_mites", ocs_invertebrates_clean)
+
+
+```
+
+####anova (significant)
+```{r}
+# `test_terms` is from monet and allows for a Type III anova for glmmTMB
+total_mites.binom1.anova <- test_terms(formula = total_mites ~ treatments * entry + block, # fixed effects go here
+                                           data = ocs_invertebrates_clean,
+                                   extra_formula = ~ (1|block:treatments), # random effects go here
+                                    fit_fun = glmmTMB,
+                                   fit_arg = list(family=nbinom1(link="log"))); total_mites.binom1.anova # put the family you decided on in the fit_arg
+```
+
+```{r}
+# Then move on to post-hoc using emmeans if indicated by the ANOVA. 
+total_mites.emm <- emmeans(models_total_mites$binom1, ~treatments|entry, type="response"); pwpm(total_mites.emm , adjust="none")
+
+# Generate CLD output
+cld_total_mites <- cld(total_mites.emm, Letters = letters, adjust = "none", sort = TRUE, reversed = TRUE)
+
+# Print the results
+cld_total_mites
+
+
+```
+
+
+```{r message=FALSE}
+ocs_invertebrates_clean |> 
+  left_join(cld_total_mites) |> 
+  ggplot(aes(x = factor(treatments, levels = c("HF", "LF", "EWM", "RT")), 
+             y = response, fill = treatments)) +
+  facet_wrap(~entry, labeller = labeller(
+    entry = c("A" = "Entry Point A", "B" = "Entry Point B")
+  )) +
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  geom_errorbar(aes(ymin = response - SE, ymax = response + SE), 
+                width = 0.2, position = position_dodge(0.9)) +
+  geom_text(aes(label = trimws(.group), y = response + SE + 3), 
+            size = 7) +
+  labs(
+    x = "",
+    y = expression("Density" ~ (individuals ~ kg^{-1} ~ "dry soil")),
+    subtitle = expression(italic("P < 0.005"))
+  ) +
+  scale_x_discrete(labels = c("High\nfertility", "Low\nfertility", 
+                              "Enhanced\nweed\nmanagement", "Reduced\ntillage")) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.3))) +
+  scale_fill_WB_d(name = "BlueberriesForSal", direction = 1) +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 12),
+    axis.title = element_text(size = 24),
+    axis.text = element_text(size = 16),
+    plot.subtitle = element_text(size = 24, face = "italic")
+  )
+ggsave("total_mites_kg.png", width = 10, height = 6, dpi = 300)
+```
+
+
+#######total_astigmata, 
+```{r}
+
+models_total_astigmata <- test_glmm_models("total_astigmata", ocs_invertebrates_clean)
+
+# Diagnostic residual plots (for best model selection)
+res.total_astigmata <- simulateResiduals(models_total_astigmata$poiss, n = 1000, integerResponse = FALSE)
+plot(res.total_astigmata)
+
+# Check overall model fit visually
+check_model(models_total_astigmata$poiss)  # Works with `performance` package
+
+```
+#######anova (significant)
+```{r}
+# `test_terms` is from monet and allows for a Type III anova for glmmTMB
+total_astigmata.poiss.anova <- test_terms(formula = total_astigmata ~ treatments * entry + block, # fixed effects go here
+                                           data = ocs_invertebrates_clean,
+                                   extra_formula = ~ (1|block:treatments), # random effects go here
+                                    fit_fun = glmmTMB,
+                                   fit_arg = list(family=poisson(link="log"))); total_astigmata.poiss.anova # put the family you decided on in the fit_arg
+```
+
+```{r}
+# Then move on to post-hoc using emmeans if indicated by the ANOVA. 
+total_astigmata.emm <- emmeans(models_total_astigmata$poiss, ~treatments|entry, type="response"); pwpm(total_astigmata.emm , adjust="none")
+
+# Generate CLD output
+cld_total_astigmata <- cld(total_astigmata.emm, Letters = letters, adjust = "none", sort = TRUE, reversed = TRUE)
+
+# Print the results
+cld_total_astigmata
+
+
+```
+
+```{r message=FALSE}
+ocs_invertebrates_clean |> 
+  left_join(cld_total_astigmata) |> 
+  ggplot(aes(x = factor(treatments, levels = c("HF", "LF", "EWM", "RT")), 
+             y = rate, fill = treatments)) +
+  facet_wrap(~entry, labeller = labeller(
+    entry = c("A" = "Entry Point A", "B" = "Entry Point B")
+  )) +
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  geom_errorbar(aes(ymin = rate - SE, ymax = rate + SE), 
+                width = 0.2, position = position_dodge(0.9)) +
+  geom_text(aes(label = trimws(.group), y = rate + SE + 1), 
+            size = 7) +
+  labs(
+    x = "",
+    y = expression("Density" ~ (individuals ~ kg^{-1} ~ "dry soil")),
+    subtitle = expression(italic("P < 0.005"))
+  ) +
+  scale_x_discrete(labels = c("High\nfertility", "Low\nfertility", 
+                              "Enhanced\nweed\nmanagement", "Reduced\ntillage")) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.3))) +
+  scale_fill_WB_d(name = "BlueberriesForSal", direction = 1) +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 12),
+    axis.title = element_text(size = 24),
+    axis.text = element_text(size = 16),
+    plot.subtitle = element_text(size = 24, face = "italic")
+  )
+ggsave("total_astigmata_kg.png", width = 10, height = 6, dpi = 300)
+```
+
+
+
+
+#######total_mesostigmata, Treatment by Entry is significant
+```{r}
+
+models_total_mesostigmata <- test_glmm_models("total_mesostigmata", ocs_invertebrates_clean)
+
+# Diagnostic residual plots (for best model selection)
+res.total_mesostigmata <- simulateResiduals(models_total_mesostigmata$tweedie, n = 1000, integerResponse = FALSE)
+plot(res.total_mesostigmata)
+
+# Check overall model fit visually
+check_model(models_total_mesostigmata$tweedie)  # Works with `performance` package
+
+
+```
+```{r}
+# `test_terms` is from monet and allows for a Type III anova for glmmTMB
+total_mesostigmata.tweedie.anova <- test_terms(formula = total_mesostigmata ~ treatments * entry + block, # fixed effects go here
+                                           data = ocs_invertebrates_clean,
+                                   extra_formula = ~ (1|block:treatments), # random effects go here
+                                    fit_fun = glmmTMB,
+                                   fit_arg = list(family=tweedie(link="log"))); total_mesostigmata.tweedie.anova# put the family you decided on in the fit_arg
+```
+
+```{r}
+# Then move on to post-hoc using emmeans if indicated by the ANOVA. 
+total_mesostigmata.emm <- emmeans(models_total_mesostigmata$tweedie, ~treatments|entry, type="response"); pwpm(total_mesostigmata.emm , adjust="none")
+
+# Generate CLD output
+cld_total_mesostigmata <- cld(total_mesostigmata.emm, Letters = letters, adjust = "none", sort = TRUE, reversed = TRUE)
+
+# Print the results
+cld_total_mesostigmata
+
+
+```
+
+```{r message=FALSE}
+ocs_invertebrates_clean |> 
+  left_join(cld_total_mesostigmata) |> 
+  ggplot(aes(x = factor(treatments, levels = c("HF", "LF", "EWM", "RT")), 
+             y = response, fill = treatments)) +
+  facet_wrap(~entry, labeller = labeller(
+    entry = c("A" = "Entry Point A", "B" = "Entry Point B")
+  )) +
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  geom_errorbar(aes(ymin = response - SE, ymax = response + SE), 
+                width = 0.2, position = position_dodge(0.9)) +
+  geom_text(aes(label = trimws(.group), y = response + SE + 0.75), 
+            size = 7) +
+  labs(
+    x = "",
+     y = expression("Density" ~ (individuals ~ kg^{-1} ~ "dry soil")),
+    subtitle = expression(italic("P < 0.05"))
+  ) +
+  scale_x_discrete(labels = c("High\nfertility", "Low\nfertility", 
+                              "Enhanced\nweed\nmanagement", "Reduced\ntillage")) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.3))) +
+  scale_fill_WB_d(name = "BlueberriesForSal", direction = 1) +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 12),
+    axis.title = element_text(size = 24),
+    axis.text = element_text(size = 16),
+    plot.subtitle = element_text(size = 24, face = "italic")
+  )
+ggsave("total_mesostigmata_kg.png", width = 10, height = 6, dpi = 300)
+```
+#######total_oribatida, Not significant
+
+```{r}
+models_total_oribatida <- test_glmm_models("total_oribatida", ocs_invertebrates_clean)
+
+# Diagnostic residual plots (for best model selection)
+res.total_oribatida <- simulateResiduals(models_total_oribatida$tweedie, n = 1000, integerResponse = FALSE)
+plot(res.total_oribatida)
+
+# Check overall model fit visually
+check_model(models_total_oribatida$tweedie)  # Works with `performance` package
+
+
+```
+######anova (not significant)
+```{r}
+# `test_terms` is from monet and allows for a Type III anova for glmmTMB
+total_oribatida.binom1.anova <- test_terms(formula = total_oribatida ~ treatments * entry + block, # fixed effects go here
+                                           data = ocs_invertebrates_clean,
+                                   extra_formula = ~ (1|block:treatments), # random effects go here
+                                    fit_fun = glmmTMB,
+                                   fit_arg = list(family=nbinom1(link="log"))); total_oribatida.binom1.anova# put the family you decided on in the fit_arg
+```
+
+#######phoretic_hypopi, 
+
+```{r}
+models_phoretic_hypopi <- test_glmm_models("phoretic_hypopi", ocs_invertebrates_clean)
+
+```
+
+####Anova (almost significant)
+```{r}
+# `test_terms` is from monet and allows for a Type III anova for glmmTMB
+phoretic_hypopi.binom1.anova <- test_terms(formula = phoretic_hypopi ~ treatments * entry + block, # fixed effects go here
+                                           data = ocs_invertebrates_clean,
+                                           extra_formula = ~ (1|block:treatments), # random effects go here
+                                           fit_fun = glmmTMB,
+                                           fit_arg = list(family=nbinom1(link="log"))); phoretic_hypopi.binom1.anova # put the family you decided on in the fit_arg
+```
+```{r}
+# Then move on to post-hoc using emmeans if indicated by the ANOVA. 
+phoretic_hypopi.emm <- emmeans(models_phoretic_hypopi$binom1, ~treatments|entry, type="response"); pwpm(phoretic_hypopi.emm , adjust="none")
+
+# Generate CLD output
+cld_phoretic_hypopi <- cld(phoretic_hypopi.emm, Letters = letters, adjust = "none", sort = TRUE, reversed = TRUE)
+
+# Print the results
+cld_phoretic_hypopi
+
+
+```
+
+```{r message=FALSE}
+ocs_invertebrates_clean |> 
+  left_join(cld_phoretic_hypopi) |> 
+  ggplot(aes(x = factor(treatments, levels = c("HF", "LF", "EWM", "RT")), 
+             y = response, fill = treatments)) +
+  facet_wrap(~entry, labeller = labeller(
+    entry = c("A" = "Entry Point A", "B" = "Entry Point B")
+  )) +
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  geom_errorbar(aes(ymin = response - SE, ymax = response + SE), 
+                width = 0.2, position = position_dodge(0.9)) +
+  geom_text(aes(label = trimws(.group), y = response + SE + 1.5), 
+            size = 7) +
+  labs(
+    x = "",
+     y = expression("Density" ~ (individuals ~ kg^{-1} ~ "dry soil")),
+    subtitle = expression(italic("P < 0.05"))
+  ) +
+  scale_x_discrete(labels = c("High\nfertility", "Low\nfertility", 
+                              "Enhanced\nweed\nmanagement", "Reduced\ntillage")) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.3))) +
+  scale_fill_WB_d(name = "BlueberriesForSal", direction = 1) +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 12),
+    axis.title = element_text(size = 24),
+    axis.text = element_text(size = 16),
+    plot.subtitle = element_text(size = 24, face = "italic")
+  )
+ggsave("phoretic_hypopi_kg.png", width = 10, height = 6, dpi = 300)
+```
+
+
+
+
+
+```{r}
+# Function to fit models and run diagnostics for a given response variable
+test_glmm_models <- function(response_var, data) {
+  
+  # Define model formulas
+  formula <- as.formula(paste(response_var, "~ treatments * entry + block + (1 | block:treatments)"))
+  
+  # Fit models with different distributions
+  models <- list(
+    binom1 = glmmTMB(formula, family = nbinom1(link = "log"), data = data),
+    binom2 = glmmTMB(formula, family = nbinom2(link = "log"), data = data),
+    poiss = glmmTMB(formula, family = poisson(link = "log"), data = data),
+    tweedie = glmmTMB(formula, family = tweedie(link = "log"), data = data),
+    zi = glmmTMB(formula, family = nbinom1(link = "log"), ziformula = ~ 1, data = data)
+  )
+
+  # Overdispersion check (using nbinom1)
+  resid_pearson <- residuals(models$binom1, type = "pearson")
+  dispersion_ratio <- sum(resid_pearson^2) / df.residual(models$binom1)
+  cat("\n--- Overdispersion Check for", response_var, "---\n")
+  cat("Dispersion Ratio:", round(dispersion_ratio, 2), "\n")
+  
+  # Zero inflation test
+  sim_residuals <- simulateResiduals(models$binom1)
+  zi_test <- testZeroInflation(sim_residuals)
+  cat("Zero Inflation Test p-value:", zi_test$p.value, "\n")
+  
+  # Compare models using AIC
+  aic_results <- AIC(models$binom1, models$binom2, models$poiss, models$tweedie, models$zi)
+  print(aic_results)
+
+  # Plot residual diagnostics
+  plot(sim_residuals)
+  
+  # Check model fit visually
+  check_model(models$binom1)  # Works with `performance` package
+  
+  return(models)  # Return models in case you want to use them later
+}
+
+# Run the function for total_oribatida
+models_total_oribatida <- test_glmm_models("total_oribatida", ocs_invertebrates_clean)
+
+
+```
+
