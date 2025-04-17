@@ -11,55 +11,21 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r message=FALSE, warning=FALSE}
 
-#Load packages 
-library(tidyverse) ##install.packages("tidyverse")
+library(tidyverse)
+library(multcomp)
+library(emmeans)
 library(knitr)
 library(patchwork) ##install.packages("patchwork")
 library(skimr)     ##install.packages("skimr")
 library(readxl)
 library(janitor) ##install.packages("janitor")
 library(kableExtra) ##install.packages("kableExtra")
-library(viridis) ##install.packages("viridis")
-library(lme4) ##install.packages("lme4")
-library(lmerTest) ##install.packages("lmerTest")
-library(emmeans) ##install.packages("emmeans")
-library(rstatix) ##install.packages("rstatix")
-#library(Matrix) ##install.packages("Matrix")
-library(multcomp) ##install.packages("multcomp")
-library(multcompView) ##install.packages("multcompView")
-library(ggResidpanel) ##install.packages("ggResidpanel")
-#library(car)
-#library(TMB)  ##install.packages("TMB")
 library(WrensBookshelf)##install.packages("WrensBookshelf")
-library(magrittr)
-library(grid)
-library(hues) ##install.packages("hues")
-library(vegan) ##install.packages("vegan")
-library(permute)
-library(ggrepel) ##install.packages("ggrepel")
-library(ggordiplots) ##install.packages("ggordiplots")
-library(FD) ##install.packages("FD")
-library(ade4)
-library(gawdis)  ##install.packages("gawdis")
 ## For GLM modeling
-install.packages("devtools")  # Install devtools if not already installed
-library(devtools)  
-install_github("singmann/monet")  # Install monet from GitHub
-library(monet)  # Load the package
-library(glmmTMB)  ##install.packages("glmmTMB")
-library(DHARMa)  ##install.packages("DHARMa")
-library(performance) ##install.packages("performance")
-library(corrplot) # for testing species x CWM
-#library(Hmisc) # for testing species x CWM
-library(broom.mixed) ##install.packages("broom.mixed")
-library(purrr)  # ##install.packages("purr")
-
-#Load Functions
-MeanPlusSe<-function(x) mean(x)+plotrix::std.error(x)
-
-find_logw0=function(x){c=trunc(log(min(x[x>0],na.rm=T)))
-d=exp(c)
-return(d)}
+library(monet)
+library(DHARMa)
+library(glmmTMB)
+library(performance)
 ```
 
 <br>
@@ -69,10 +35,10 @@ return(d)}
 ## Load data
 
 ``` {r}
-ocs_soil_health_raw <- read_excel("~/Github/OCS-microinvertebrates/ocs_soil_health_2022.xlsx")
+ocs_soil_health_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_soil_health_2022.xlsx")
 ocs_soil_health_raw$block <- as.factor(ocs_soil_health_raw$block)
 ocs_soil_health_raw$entry <- as.factor(ocs_soil_health_raw$entry)
-ocs_soil_health_raw$treatments <- as.factor(ocs_soil_health_raw$treatments)
+ocs_soil_health_raw$system <- as.factor(ocs_soil_health_raw$system)
 
 
 
@@ -85,7 +51,7 @@ kable(head(ocs_soil_health_raw))
 ```{r}
  #Filter relevant data (we can't use data from alley and corn)
 ocs_soil_health_clean <- ocs_soil_health_raw |>  
-  filter(treatments %in% c("HF", "LF", "EWM", "RT"))
+  filter(system %in% c("HF", "LF", "EWM", "RT"))
 
 # Display cleaned dataset
 kable(head(ocs_soil_health_clean))
@@ -93,82 +59,380 @@ kable(head(ocs_soil_health_clean))
 
 ```
 #Model testing
-##pred_water_capacity
+
+##soil_texture_sand
 ```{r}
-pred_water_capacity.gauss<- glmmTMB(pred_water_capacity~ treatments * entry + block + (1 | block:treatments),
-                      data = ocs_soil_health_clean,
-                      family = gaussian())
 
-pred_water_capacity.gamma <- glmmTMB(pred_water_capacity ~ treatments * entry + block + (1 | block:treatments),
-                                     data = ocs_soil_health_clean,
-                                     family = Gamma(link = "log"))
+soil_texture_sand.beta <- glmmTMB(soil_texture_sand / 100 ~ system * entry + block + (1 | block:system),
+                                    data = ocs_soil_health_clean,
+                                    family = beta_family())
 
-#look at the AIC
-AIC(pred_water_capacity.gauss,pred_water_capacity.gamma )
-logLik(pred_water_capacity.gamma)
+simulateResiduals(soil_texture_sand.beta,plot = TRUE) 
 
-ocs_soil_health_clean <- ocs_soil_health_clean |> 
-  mutate(pred_water_capacity_scaled = pred_water_capacity * 100)
-
-pred_water_capacity.gauss <- glmmTMB(pred_water_capacity_scaled ~ treatments * entry + block + (1 | block:treatments),
-                                     data = ocs_soil_health_clean,
-                                      family = gaussian())
-
-AIC(pred_water_capacity.gauss) 
-
-# The simulate residuals function comes from DHARMa and allows visual inspection of
-# glmm fit. Another useful way of deciding which model you will use for this response variable.
-simulateResiduals(pred_water_capacity.gauss,plot = TRUE) 
-
-check_model(pred_water_capacity.gauss)
+check_model(soil_texture_sand.beta)
 
 
 ```
 
-###monet annova 
-###not significant
+<br>
+###Anova 
+
 ```{r}
-# `test_terms` is from monet and allows for a Type III anova for glmmTMB
-pred_water_capacity.gauss.anova <- test_terms(formula = pred_water_capacity~ treatments * entry + block, # fixed effects go here
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+soil_texture_sand.anova <- test_terms(formula = soil_texture_sand/100~ system * entry + block, # fixed effects go here
                                    data = ocs_soil_health_clean,
-                                   extra_formula = ~ (1|block:treatments), # random effects go here
+                                   extra_formula = ~ (1|block:system), # random effects go here
                                    fit_fun = glmmTMB,
-                                   fit_arg = list(family = gaussian())); pred_water_capacity.gauss.anova  # put the family you decided on in the fit_arg
+                                   fit_arg = list(family = beta_family()));soil_texture_sand.anova 
+                                   
+soil_texture_sand.anova
+                              
+                                   
+                               
 ```
+<br>
+### Means comparisons
+
+```{r}
+# Define model object (you can swap in different ones)
+mod <- soil_texture_sand.beta
+
+# Create a named list of comparisons and corresponding CLDs
+library(emmeans)
+library(multcompView)
+
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Extract compact letter displays
+cld_results <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Access them like this:
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results$entry
+cld_results$system
+cld_results$system_entry
+```
+
+<br>
+
+##soil_texture_silt
+```{r}
+
+soil_texture_silt.beta <- glmmTMB(soil_texture_silt / 100 ~ system * entry + block + (1 | block:system),
+                                    data = ocs_soil_health_clean,
+                                    family = beta_family())
+
+simulateResiduals(soil_texture_silt.beta ,plot = TRUE) 
+
+check_model(soil_texture_silt.beta )
+
+
+```
+
+###Anova 
+
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+soil_texture_silt.anova <- test_terms(formula = soil_texture_silt/100~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = beta_family()));soil_texture_silt.anova 
+
+soil_texture_silt.anova 
+                                   
+
+                               
+```
+<br>
+### Means comparisons
+
+```{r}
+# Define model object (you can swap in different ones)
+mod <- soil_texture_silt.beta
+
+
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Extract compact letter displays
+cld_results <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Access them like this:
+#tukey_results$entry$emmeans
+#tukey_results$system$emmeans
+#tukey_results$system_entry$emmeans
+#tukey_results$entry$contrasts
+#tukey_results$system$contrasts
+#tukey_results$system_entry$contrasts
+#cld_results$entry
+#cld_results$system
+#cld_results$system_entry
+```
+
+
+##soil_texture_clay
+```{r}
+
+soil_texture_clay.beta <- glmmTMB(soil_texture_clay / 100 ~ system * entry + block + (1 | block:system),
+                                    data = ocs_soil_health_clean,
+                                    family = beta_family())
+
+simulateResiduals(soil_texture_clay.beta,plot = TRUE) 
+
+check_model(soil_texture_clay.beta)
+
+
+```
+
+###Anova 
+
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+soil_texture_clay.anova <- test_terms(formula = soil_texture_clay/100~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = beta_family()));soil_texture_clay.anova 
+
+                               
+```
+<br>
+### Means comparisons
+
+```{r}
+# Define model object (you can swap in different ones)
+mod <- soil_texture_clay.beta
+
+# Create a named list of comparisons and corresponding CLDs
+library(emmeans)
+library(multcompView)
+
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Extract compact letter displays
+cld_results <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Access them like this:
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results$entry
+cld_results$system
+cld_results$system_entry
+```
+
+
+
+
+##pred_water_capacity
+
+```{r}
+
+pred_water_capacity.beta <- glmmTMB(pred_water_capacity ~ system * entry + block + (1 | block:system),
+                                    data = ocs_soil_health_clean,
+                                    family = beta_family())
+
+simulateResiduals(pred_water_capacity.beta,plot = TRUE) 
+
+check_model(pred_water_capacity.beta)
+
+
+```
+
+###Anova 
+
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+pred_water_capacity.anova <- test_terms(formula = pred_water_capacity~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = beta_family()));pred_water_capacity.anova 
+
+
+```
+<br>
+### Means comparisons
+
+```{r}
+# Define model object (you can swap in different ones)
+mod <- pred_water_capacity.beta
+
+# Create a named list of comparisons and corresponding CLDs
+library(emmeans)
+library(multcompView)
+
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Extract compact letter displays
+cld_results <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Access them like this:
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results$entry
+cld_results$system
+cld_results$system_entry
+```
+
+
 
 ##surface_hardness
 ```{r}
-surface_hardness.gauss<- glmmTMB(surface_hardness~ treatments * entry + block + (1 | block:treatments),
+surface_hardness.gauss<- glmmTMB(surface_hardness~ system* entry + block + (1 | block:system),
                       data = ocs_soil_health_clean,
                       family = gaussian())
 
-surface_hardness.gamma <- glmmTMB(surface_hardness~ treatments * entry + block + (1 | block:treatments),
-                                     data = ocs_soil_health_clean,
-                                     family = Gamma(link = "log"))
 
 #look at the AIC
-AIC(surface_hardness.gauss,surface_hardness.gamma )
+AIC(surface_hardness.gauss)
 
+simulateResiduals(surface_hardness.gauss,plot = TRUE) 
 
-ocs_soil_health_clean <- ocs_soil_health_clean |> 
-  mutate(pred_water_capacity_scaled = pred_water_capacity * 100)
-
-pred_water_capacity.gauss <- glmmTMB(pred_water_capacity_scaled ~ treatments * entry + block + (1 | block:treatments),
-                                     data = ocs_soil_health_clean,
-                                      family = gaussian())
-
-AIC(pred_water_capacity.gauss) 
-
-# The simulate residuals function comes from DHARMa and allows visual inspection of
-# glmm fit. Another useful way of deciding which model you will use for this response variable.
-simulateResiduals(surface_hardness.gamma,plot = TRUE) 
-
-check_model(surface_hardness.gamma)
+check_model(surface_hardness.gauss)
 
 
 ```
 
-###monet annova 
+### Anova 
+
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+surface_hardness.anova <- test_terms(formula = surface_hardness~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = gaussian()));surface_hardness.anova 
+
+                               
+```
+<br>
+### Means comparisons
+
+```{r}
+# Define model object (you can swap in different ones)
+mod <- surface_hardness.gauss
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
 ###significant
 
 ```{r}
