@@ -60,7 +60,7 @@ kable(head(ocs_soil_health_clean))
 ```
 #Model testing
 
-##soil_texture_sand
+##Soil_texture_sand
 ```{r}
 
 soil_texture_sand.beta <- glmmTMB(soil_texture_sand / 100 ~ system * entry + block + (1 | block:system),
@@ -75,7 +75,7 @@ check_model(soil_texture_sand.beta)
 ```
 
 <br>
-###Anova 
+###anova 
 
 ```{r}
 ## `test_terms` is from monet and allows for a Type III anova for glmmTMB
@@ -92,7 +92,7 @@ soil_texture_sand.anova
                                
 ```
 <br>
-### Means comparisons
+### means comparisons
 
 ```{r}
 # Define model object (you can swap in different ones)
@@ -132,7 +132,7 @@ cld_results$system_entry
 
 <br>
 
-##soil_texture_silt
+##Soil_texture_silt
 ```{r}
 
 soil_texture_silt.beta <- glmmTMB(soil_texture_silt / 100 ~ system * entry + block + (1 | block:system),
@@ -146,7 +146,7 @@ check_model(soil_texture_silt.beta )
 
 ```
 
-###Anova 
+###anova 
 
 ```{r}
 ## `test_terms` is from monet and allows for a Type III anova for glmmTMB
@@ -158,12 +158,10 @@ soil_texture_silt.anova <- test_terms(formula = soil_texture_silt/100~ system * 
                                    fit_arg = list(family = beta_family()));soil_texture_silt.anova 
 
 soil_texture_silt.anova 
-                                   
-
-                               
+                                  
 ```
 <br>
-### Means comparisons
+### means comparisons
 
 ```{r}
 # Define model object (you can swap in different ones)
@@ -199,7 +197,7 @@ cld_results <- list(
 ```
 
 
-##soil_texture_clay
+##Soil_texture_clay
 ```{r}
 
 soil_texture_clay.beta <- glmmTMB(soil_texture_clay / 100 ~ system * entry + block + (1 | block:system),
@@ -213,7 +211,7 @@ check_model(soil_texture_clay.beta)
 
 ```
 
-###Anova 
+###anova 
 
 ```{r}
 ## `test_terms` is from monet and allows for a Type III anova for glmmTMB
@@ -227,7 +225,7 @@ soil_texture_clay.anova <- test_terms(formula = soil_texture_clay/100~ system * 
                                
 ```
 <br>
-### Means comparisons
+### means comparisons
 
 ```{r}
 # Define model object (you can swap in different ones)
@@ -264,11 +262,9 @@ cld_results$entry
 cld_results$system
 cld_results$system_entry
 ```
+<br>
 
-
-
-
-##pred_water_capacity
+##Pred_water_capacity
 
 ```{r}
 
@@ -282,8 +278,8 @@ check_model(pred_water_capacity.beta)
 
 
 ```
-
-###Anova 
+<br>
+###anova 
 
 ```{r}
 ## `test_terms` is from monet and allows for a Type III anova for glmmTMB
@@ -297,7 +293,7 @@ pred_water_capacity.anova <- test_terms(formula = pred_water_capacity~ system * 
 
 ```
 <br>
-### Means comparisons
+### means comparisons
 
 ```{r}
 # Define model object (you can swap in different ones)
@@ -337,24 +333,35 @@ cld_results$system_entry
 
 
 
-##surface_hardness
+##Surface_hardness
 ```{r}
 surface_hardness.gauss<- glmmTMB(surface_hardness~ system* entry + block + (1 | block:system),
                       data = ocs_soil_health_clean,
                       family = gaussian())
 
+surface_hardness.gamma <- glmmTMB(surface_hardness~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
 
 #look at the AIC
-AIC(surface_hardness.gauss)
+AIC(surface_hardness.gauss,surface_hardness.gamma )
 
-simulateResiduals(surface_hardness.gauss,plot = TRUE) 
 
-check_model(surface_hardness.gauss)
+
+
+
+#look at the AIC
+AIC(surface_hardness.gamma)
+
+simulateResiduals(surface_hardness.gamma,plot = TRUE) 
+
+check_model(surface_hardness.gamma)
 
 
 ```
-
-### Anova 
+<br>
+### anova 
 
 ```{r}
 ## `test_terms` is from monet and allows for a Type III anova for glmmTMB
@@ -363,16 +370,580 @@ surface_hardness.anova <- test_terms(formula = surface_hardness~ system * entry 
                                    data = ocs_soil_health_clean,
                                    extra_formula = ~ (1|block:system), # random effects go here
                                    fit_fun = glmmTMB,
-                                   fit_arg = list(family = gaussian()));surface_hardness.anova 
+                                   fit_arg = list(family = Gamma(link = "log")));surface_hardness.anova 
 
                                
 ```
 <br>
-### Means comparisons
+### means comparisons
 
 ```{r}
 # Define model object (you can swap in different ones)
-mod <- surface_hardness.gauss
+mod <- surface_hardness.gamma
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+<br>
+
+##Subsurface_hardness
+```{r}
+subsurface_hardness.gauss<- glmmTMB(subsurface_hardness~ system* entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+subsurface_hardness.gamma <- glmmTMB(surface_hardness~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+
+#look at the AIC
+AIC(subsurface_hardness.gauss,subsurface_hardness.gamma )
+
+
+
+
+#look at the AIC
+AIC(subsurface_hardness.gauss)
+
+simulateResiduals(subsurface_hardness.gauss,plot = TRUE) 
+
+check_model(subsurface_hardness.gauss)
+
+
+```
+<br>
+### anova 
+
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+subsurface_hardness.anova <- test_terms(formula = subsurface_hardness~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = gaussian()));subsurface_hardness.anova 
+
+                               
+```
+<br>
+### means comparisons
+
+```{r}
+# Define model object (you can swap in different ones)
+mod <- subsurface_hardness.gauss
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+##Aggregate_stability
+```{r}
+aggregate_stability.beta <- glmmTMB(aggregate_stability / 100 ~ system * entry + block + (1 | block:system),
+                                    data = ocs_soil_health_clean,
+                                    family = beta_family())
+
+simulateResiduals(aggregate_stability.beta,plot = TRUE) 
+
+check_model(aggregate_stability.beta)
+
+
+```
+<br>
+###anova
+
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+aggregate_stability.anova <- test_terms(formula = aggregate_stability/100~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = beta_family()));aggregate_stability.anova 
+
+aggregate_stability.anova 
+                                  
+```
+<br>
+### means comparisons
+
+```{r}
+# Define model object (you can swap in different ones)
+mod <- aggregate_stability.beta
+
+# Create a named list of comparisons and corresponding CLDs
+library(emmeans)
+library(multcompView)
+
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Extract compact letter displays
+cld_results <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Access them like this:
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results$entry
+cld_results$system
+cld_results$system_entry
+```
+<br>
+# Organic_matter
+```{r}
+
+organic_matter.beta <- glmmTMB(organic_matter / 100 ~ system * entry + block + (1 | block:system),
+                                    data = ocs_soil_health_clean,
+                                    family = beta_family())
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(organic_matter.beta,plot = TRUE) 
+
+check_model(organic_matter.beta)
+
+
+```
+
+<br>
+
+###anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+organic_matter.anova <- test_terms(formula = organic_matter/100~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = beta_family()));organic_matter.anova 
+
+
+```
+
+<br>
+### means comparisons
+
+```{r}
+# Define model object (you can swap in different ones)
+mod <- organic_matter.beta
+
+# Create a named list of comparisons and corresponding CLDs
+library(emmeans)
+library(multcompView)
+
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Extract compact letter displays
+cld_results <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Access them like this:
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results$entry
+cld_results$system
+cld_results$system_entry
+```
+
+
+
+
+
+
+
+# Soc
+```{r}
+
+soc.beta <- glmmTMB(soc / 100 ~ system * entry + block + (1 | block:system),
+                                    data = ocs_soil_health_clean,
+                                    family = beta_family())
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(soc.beta,plot = TRUE) 
+
+check_model(soc.beta)
+
+
+```
+
+<br>
+
+###anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+soc.anova <- test_terms(formula = soc/100~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = beta_family()));soc.anova 
+
+
+```
+<br>
+### means comparisons
+
+```{r}
+# Define model object (you can swap in different ones)
+mod <- soc.beta
+
+# Create a named list of comparisons and corresponding CLDs
+library(emmeans)
+library(multcompView)
+
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Extract compact letter displays
+cld_results <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Access them like this:
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results$entry
+cld_results$system
+cld_results$system_entry
+```
+# Total_c
+```{r}
+
+total_c.beta <- glmmTMB(total_c / 100 ~ system * entry + block + (1 | block:system),
+                                    data = ocs_soil_health_clean,
+                                    family = beta_family())
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(total_c.beta,plot = TRUE) 
+
+check_model(total_c.beta)
+
+
+```
+
+<br>
+
+###anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+total_c.anova <- test_terms(formula = total_c/100~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = beta_family()));total_c.anova 
+
+
+```
+<br>
+### means comparisons
+
+```{r}
+# Define model object (you can swap in different ones)
+mod <- total_c.beta
+
+# Create a named list of comparisons and corresponding CLDs
+library(emmeans)
+library(multcompView)
+
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Extract compact letter displays
+cld_results <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Access them like this:
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results$entry
+cld_results$system
+cld_results$system_entry
+```
+# Total_n
+```{r}
+
+total_n.beta <- glmmTMB(total_n / 100 ~ system * entry + block + (1 | block:system),
+                                    data = ocs_soil_health_clean,
+                                    family = beta_family())
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(total_n.beta,plot = TRUE) 
+
+check_model(total_n.beta)
+
+
+
+```
+
+<br>
+
+###anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+total_n.anova <- test_terms(formula = total_n/100~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = beta_family()));total_n.anova 
+
+
+```
+<br>
+### means comparisons
+
+```{r}
+# Define model object (you can swap in different ones)
+mod <- total_n.beta
+
+# Create a named list of comparisons and corresponding CLDs
+library(emmeans)
+library(multcompView)
+
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Extract compact letter displays
+cld_results <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Access them like this:
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results$entry
+cld_results$system
+cld_results$system_entry
+```
+
+#Pred_soil_protein
+```{r}
+pred_soil_protein.gauss<- glmmTMB(pred_soil_protein~ system * entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+
+
+
+
+pred_soil_protein.gamma <- glmmTMB(pred_soil_protein~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+
+#look at the AIC
+AIC(pred_soil_protein.gauss,pred_soil_protein.gamma )
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(pred_soil_protein.gamma,plot = TRUE) 
+
+check_model(pred_soil_protein.gamma)
+
+
+```
+
+<br>
+### anova 
+
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+pred_soil_protein.anova <- test_terms(formula = pred_soil_protein~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = Gamma(link = "log")));pred_soil_protein.anova 
+
+                               
+```
+
+<br>
+### means comparisons
+
+```{r}
+# Define model object (you can swap in different ones)
+mod <- pred_soil_protein.gamma
 
 # Tukey HSD pairwise comparisons
 tukey_results <- list(
@@ -433,224 +1004,4060 @@ cld_results_lsd$system_entry
 
 ```
 
-###significant
-
+#Respiration
 ```{r}
-#`test_terms` is from monet and allows for a Type III anova for glmmTMB
-
-surface_hardness.gamma.anova <- test_terms(formula = surface_hardness~ treatments * entry +block, #fixed effects go here
-                                   data = ocs_soil_health_clean,
-                                   extra_formula = ~ (1|block:treatments), # random effects go here
-                                   fit_fun = glmmTMB,
-                                   fit_arg = list(Gamma(link = "log"))); surface_hardness.gamma.anova  # put the family you decided on in the fit_arg
-```
-
-```{r}
-# Then move on to post-hoc using emmeans if indicated by the ANOVA. The example below would be used if the System term
-# alone was significant.
-surface_hardness.emm <- emmeans(surface_hardness.gamma, ~treatments|entry, type="response"); pwpm(surface_hardness.emm , adjust="none")
-
-
-```
-```{r}
-# Compute estimated marginal means for treatments within each entry
-surface_hardness.emm <- emmeans(surface_hardness.gamma, ~treatments | entry, type = "response")
-
-# Generate CLD output
-cld_surface_hardness <- cld(surface_hardness.emm, Letters = letters, adjust = "none", sort = TRUE, reversed = TRUE)
-
-# Print the results
-cld_surface_hardness
-
-```
-##subsurface_hardness
-```{r}
-subsurface_hardness.gauss<- glmmTMB(subsurface_hardness~ treatments * entry + block + (1 | block:treatments),
+respiration.gauss<- glmmTMB(respiration~ system * entry + block + (1 | block:system),
                       data = ocs_soil_health_clean,
                       family = gaussian())
 
-subsurface_hardness.gamma <- glmmTMB(subsurface_hardness~ treatments * entry + block + (1 | block:treatments),
+
+
+
+
+respiration.gamma <- glmmTMB(respiration~ system * entry + block + (1 | block:system),
                                      data = ocs_soil_health_clean,
                                      family = Gamma(link = "log"))
 
+
 #look at the AIC
-AIC(subsurface_hardness.gauss,subsurface_hardness.gamma )
+AIC(respiration.gauss,respiration.gamma )
+
+res_gauss <- simulateResiduals(respiration.gauss, plot = TRUE)
+res_gamma <- simulateResiduals(respiration.gamma, plot = TRUE)
 
 
-ocs_soil_health_clean <- ocs_soil_health_clean |> 
-  mutate(pred_water_capacity_scaled = pred_water_capacity * 100)
-
-pred_water_capacity.gauss <- glmmTMB(pred_water_capacity_scaled ~ treatments * entry + block + (1 | block:treatments),
-                                     data = ocs_soil_health_clean,
-                                      family = gaussian())
-
-AIC(pred_water_capacity.gauss) 
 
 # The simulate residuals function comes from DHARMa and allows visual inspection of
 # glmm fit. Another useful way of deciding which model you will use for this response variable.
-simulateResiduals(subsurface_hardness.gamma,plot = TRUE) 
+simulateResiduals(respiration.gauss,plot = TRUE) 
 
-check_model(subsurface_hardness.gamma)
+check_model(respiration.gauss)
 
 
 ```
-###monet annova 
-###significant
+
+<br>
+### anova 
 
 ```{r}
-#`test_terms` is from monet and allows for a Type III anova for glmmTMB
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
 
-subsurface_hardness.gamma.anova <- test_terms(formula = subsurface_hardness~ treatments * entry +block, #fixed effects go here
+respiration.anova <- test_terms(formula = respiration~ system * entry + block, # fixed effects go here
                                    data = ocs_soil_health_clean,
-                                   extra_formula = ~ (1|block:treatments), # random effects go here
+                                   extra_formula = ~ (1|block:system), # random effects go here
                                    fit_fun = glmmTMB,
-                                   fit_arg = list(Gamma(link = "log"))); subsurface_hardness.gamma.anova  # put the family you decided on in the fit_arg
+                                   fit_arg = list(family = gaussian()));respiration.anova 
+
+                               
 ```
-```{r}
-# Then move on to post-hoc using emmeans if indicated by the ANOVA. The example below would be used if the System term
-# alone was significant.
-subsurface_hardness.emm <- emmeans(subsurface_hardness.gamma, ~treatments|entry, type="response"); pwpm(subsurface_hardness.emm , adjust="none")
 
-
-```
-```{r}
-# Compute estimated marginal means for treatments within each entry
-subsurface_hardness.emm <- emmeans(subsurface_hardness.gamma, ~treatments | entry, type = "response")
-
-# Generate CLD output
-cld_subsurface_hardness <- cld(subsurface_hardness.emm, Letters = letters, adjust = "none", sort = TRUE, reversed = TRUE)
-
-# Print the results
-cld_subsurface_hardness
-
-```
-# organic_matter(is a percentage)
-```{r}
-
-
-
-organic_matter.beta <- glmmTMB(organic_matter / 100 ~ treatments * entry + block + (1 | block:treatments),
-                                    data = ocs_soil_health_clean,
-                                    family = beta_family())
-
-
-
-
-# The simulate residuals function comes from DHARMa and allows visual inspection of
-# glmm fit. Another useful way of deciding which model you will use for this response variable.
-simulateResiduals(organic_matter.beta,plot = TRUE) 
-
-check_model(organic_matter.beta)
-
-
-```
-###monet annova 
-###Not significant
+<br>
+### means comparisons
 
 ```{r}
-#`test_terms` is from monet and allows for a Type III anova for glmmTMB
+# Define model object (you can swap in different ones)
+mod <- respiration.gauss
 
-# Scale organic matter percentage to (0,1)
-ocs_soil_health_clean$organic_matter_scaled <- ocs_soil_health_clean$organic_matter / 100
-
-# Fit beta regression
-organic_matter.beta.anova <- test_terms(
-  formula = organic_matter_scaled ~ treatments * entry + block,  # Fixed effects
-  data = ocs_soil_health_clean,
-  extra_formula = ~ (1|block:treatments),  # Random effects
-  fit_fun = glmmTMB,
-  fit_arg = list(family = beta_family())
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
 )
 
-organic_matter.beta.anova
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+#Active_carbon
+```{r}
+active_carbon.gauss<- glmmTMB(active_carbon~ system * entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+
+
+
+
+active_carbon.gamma <- glmmTMB(active_carbon~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+
+#look at the AIC
+AIC(active_carbon.gauss,active_carbon.gamma )
+
+res_gauss <- simulateResiduals(active_carbon.gauss, plot = TRUE)
+res_gamma <- simulateResiduals(active_carbon.gamma, plot = TRUE)
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(active_carbon.gamma,plot = TRUE) 
+
+check_model(active_carbon.gamma)
+
+
+```
+
+<br>
+### anova 
+
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+active_carbon.anova <- test_terms(formula = active_carbon~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = Gamma(link = "log")));active_carbon.anova
+
+                               
+```
+
+<br>
+### means comparisons
+
+```{r}
+# Define model object (you can swap in different ones)
+mod <- active_carbon.gamma
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+#Ph
+```{r}
+ph.gauss<- glmmTMB(ph~ system * entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+
+
+
+#look at the AIC
+AIC(ph.gauss)
+
+res_gauss <- simulateResiduals(ph.gauss, plot = TRUE)
+
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(ph.gauss,plot = TRUE) 
+
+check_model(ph.gauss)
+
+
+```
+##anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+ph.anova <- test_terms(formula = ph~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = gaussian()));ph.anova 
+
+                               
+```
+
+##means comparison
+```{r}
+# Define model object (you can swap in different ones)
+mod <- ph.gauss
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+<br>
+#Phosphorous
+```{r}
+p.gauss<- glmmTMB(p~ system * entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+p.gauss_log <- glmmTMB(log(p) ~ system * entry + block + (1 | block:system),
+                       data = ocs_soil_health_clean,
+                       family = gaussian())
+
+
+
+
+
+p.gamma <- glmmTMB(p~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "identity"))
+
+
+#look at the AIC
+AIC(p.gauss,p.gamma,p.gauss_log )
+
+res_gauss <- simulateResiduals(p.gauss, plot = TRUE)
+res_gamma <- simulateResiduals(p.gamma, plot = TRUE)
+res_gauss_log <- simulateResiduals(p.gauss_log, plot = TRUE)
+
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(p.gauss_log,plot = TRUE) 
+
+check_model(p.gauss_log)
+
+
+```
+
+##anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+p.anova <- test_terms(formula = log(p)~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = gaussian()));p.anova 
+
+                               
+```
+##means comparison
+```{r}
+# Define model object (you can swap in different ones)
+mod <- p.gauss
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+<br>
+
+#Potassium
+```{r}
+k.gauss<- glmmTMB(k~ system * entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+k.gauss_log <- glmmTMB(log(k) ~ system * entry + block + (1 | block:system),
+                       data = ocs_soil_health_clean,
+                       family = gaussian())
+
+
+
+
+
+k.gamma <- glmmTMB(k~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "identity"))
+
+
+#look at the AIC
+AIC(k.gauss,k.gamma,k.gauss_log )
+
+res_gauss <- simulateResiduals(k.gauss, plot = TRUE)
+res_gamma <- simulateResiduals(k.gamma, plot = TRUE)
+res_gauss_log <- simulateResiduals(k.gauss_log, plot = TRUE)
+
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(k.gauss_log,plot = TRUE) 
+
+check_model(k.gauss_log)
+
+
+```
+
+##anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+k.anova <- test_terms(formula = log(k)~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = gaussian()));k.anova 
+
+                               
+```
+
+##means comparison
+```{r}
+# Define model object (you can swap in different ones)
+mod <- k.gauss_log
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+<br>
+#Magnesium
+```{r}
+mg.gauss<- glmmTMB(mg~ system * entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+mg.gauss_log <- glmmTMB(log(mg) ~ system * entry + block + (1 | block:system),
+                       data = ocs_soil_health_clean,
+                       family = gaussian())
+
+
+
+
+
+mg.gamma <- glmmTMB(mg~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "identity"))
+
+
+#look at the AIC
+AIC(mg.gauss,mg.gamma,mg.gauss_log )
+
+res_gauss <- simulateResiduals(mg.gauss, plot = TRUE)
+res_gamma <- simulateResiduals(mg.gamma, plot = TRUE)
+res_gauss_log <- simulateResiduals(mg.gauss_log, plot = TRUE)
+
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(mg.gauss_log,plot = TRUE) 
+
+check_model(mg.gauss_log)
+
+
+```
+<br>
+##anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+mg.anova <- test_terms(formula = log(mg)~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = gaussian()));mg.anova 
+
+                               
+```
+
+<br>
+##means comparison
+```{r}
+# Define model object (you can swap in different ones)
+mod <- mg.gauss_log
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+<br>
+#Iron
+```{r}
+fe.gauss<- glmmTMB(fe~ system * entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+fe.gauss_log <- glmmTMB(log(fe) ~ system * entry + block + (1 | block:system),
+                       data = ocs_soil_health_clean,
+                       family = gaussian())
+
+
+
+
+
+fe.gamma <- glmmTMB(fe~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+
+#look at the AIC
+AIC(mg.gauss,mg.gamma,mg.gauss_log )
+
+res_gauss <- simulateResiduals(fe.gauss, plot = TRUE)
+res_gamma <- simulateResiduals(fe.gamma, plot = TRUE)
+res_gauss_log <- simulateResiduals(fe.gauss_log, plot = TRUE)
+
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(mg.gauss_log,plot = TRUE) 
+
+check_model(mg.gauss_log)
+
+
+```
+
+<br>
+##anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+fe.anova <- test_terms(formula = log(fe)~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = gaussian()));fe.anova 
+
+                               
+```
+
+<br>
+##means comparison
+```{r}
+# Define model object (you can swap in different ones)
+mod <- fe.gauss_log
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+<br>
+# Manganese
+```{r}
+mn.gauss<- glmmTMB(mn~ system * entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+mn.gauss_log <- glmmTMB(log(mn) ~ system * entry + block + (1 | block:system),
+                       data = ocs_soil_health_clean,
+                       family = gaussian())
+
+
+
+
+
+mn.gamma <- glmmTMB(mn~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+
+#look at the AIC
+AIC(mn.gauss,mn.gamma,mn.gauss_log )
+
+res_gauss <- simulateResiduals(mn.gauss, plot = TRUE)
+res_gamma <- simulateResiduals(mn.gamma, plot = TRUE)
+res_gauss_log <- simulateResiduals(mn.gauss_log, plot = TRUE)
+
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(mn.gauss_log,plot = TRUE) 
+
+check_model(mn.gauss_log)
+
+
+```
+
+<br>
+##anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+mn.anova <- test_terms(formula = log(mn)~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = gaussian()));mn.anova 
+
+                               
+```
+
+<br>
+##means comparison
+```{r}
+# Define model object (you can swap in different ones)
+mod <- mn.gauss_log
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+<br>
+# Zinc
+```{r}
+zn.gauss<- glmmTMB(zn~ system * entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+zn.gauss_log <- glmmTMB(log(zn) ~ system * entry + block + (1 | block:system),
+                       data = ocs_soil_health_clean,
+                       family = gaussian())
+
+
+
+
+
+zn.gamma <- glmmTMB(zn~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+
+#look at the AIC
+AIC(zn.gauss,zn.gamma,zn.gauss_log )
+
+res_gauss <- simulateResiduals(zn.gauss, plot = TRUE)
+res_gamma <- simulateResiduals(zn.gamma, plot = TRUE)
+res_gauss_log <- simulateResiduals(zn.gauss_log, plot = TRUE)
+
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(zn.gauss_log,plot = TRUE) 
+
+check_model(zn.gauss_log)
+
+
+```
+
+<br>
+##anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+zn.anova <- test_terms(formula = log(zn)~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = gaussian()));zn.anova 
+
+                               
+```
+
+<br>
+##means comparison
+```{r}
+# Define model object (you can swap in different ones)
+mod <- zn.gauss_log
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+<br>
+# Aluminum
+```{r}
+al.gauss<- glmmTMB(al~ system * entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+al.gauss_log <- glmmTMB(log(al) ~ system * entry + block + (1 | block:system),
+                       data = ocs_soil_health_clean,
+                       family = gaussian())
+
+
+
+
+
+al.gamma <- glmmTMB(al~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+
+#look at the AIC
+AIC(al.gauss,al.gamma,al.gauss_log )
+
+res_gauss <- simulateResiduals(al.gauss, plot = TRUE)
+res_gamma <- simulateResiduals(al.gamma, plot = TRUE)
+res_gauss_log <- simulateResiduals(al.gauss_log, plot = TRUE)
+
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(al.gauss_log,plot = TRUE) 
+
+check_model(al.gauss_log)
+
+
+```
+
+<br>
+##anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+al.anova <- test_terms(formula = log(al)~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = gaussian()));al.anova 
+
+                               
+```
+
+<br>
+##means comparison
+```{r}
+# Define model object (you can swap in different ones)
+mod <- al.gauss_log
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+<br>
+# Calcium
+```{r}
+ca.gauss<- glmmTMB(ca~ system * entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+ca.gauss_log <- glmmTMB(log(ca) ~ system * entry + block + (1 | block:system),
+                       data = ocs_soil_health_clean,
+                       family = gaussian())
+
+
+
+
+
+ca.gamma <- glmmTMB(ca~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+
+#look at the AIC
+AIC(ca.gauss,ca.gamma,ca.gauss_log )
+
+res_gauss <- simulateResiduals(ca.gauss, plot = TRUE)
+res_gamma <- simulateResiduals(ca.gamma, plot = TRUE)
+res_gauss_log <- simulateResiduals(ca.gauss_log, plot = TRUE)
+
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(ca.gauss_log,plot = TRUE) 
+
+check_model(ca.gauss_log)
+
+
+```
+
+<br>
+##anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+ca.anova <- test_terms(formula = log(ca)~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = gaussian()));ca.anova 
+
+                               
+```
+
+<br>
+##means comparison
+```{r}
+# Define model object (you can swap in different ones)
+mod <- ca.gauss_log
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+<br>
+# Copper
+```{r}
+cu.gauss<- glmmTMB(cu~ system * entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+cu.gauss_log <- glmmTMB(log(cu) ~ system * entry + block + (1 | block:system),
+                       data = ocs_soil_health_clean,
+                       family = gaussian())
+
+
+
+
+
+cu.gamma <- glmmTMB(cu~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+
+#look at the AIC
+AIC(cu.gauss,cu.gamma,cu.gauss_log )
+
+res_gauss <- simulateResiduals(cu.gauss, plot = TRUE)
+res_gamma <- simulateResiduals(cu.gamma, plot = TRUE)
+res_gauss_log <- simulateResiduals(cu.gauss_log, plot = TRUE)
+
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(cu.gamma,plot = TRUE) 
+
+check_model(cu.gamma)
+
+
+```
+
+### anova 
+
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+cu.anova <- test_terms(formula = cu~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = Gamma(link = "log")));cu.anova
+
+                               
+```
+
+<br>
+##means comparison
+```{r}
+# Define model object (you can swap in different ones)
+mod <- cu.gamma
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+<br>
+# Sulfer
+```{r}
+s.gauss<- glmmTMB(s~ system * entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
+
+s.gauss_log <- glmmTMB(log(s) ~ system * entry + block + (1 | block:system),
+                       data = ocs_soil_health_clean,
+                       family = gaussian())
+
+s.gamma <- glmmTMB(s~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
+
+
+#look at the AIC
+AIC(s.gauss,s.gamma,s.gauss_log )
+
+res_gauss <- simulateResiduals(s.gauss, plot = TRUE, allow.new.levels = TRUE)
+res_gamma <- simulateResiduals(s.gamma, plot = TRUE, allow.new.levels = TRUE)
+res_gauss_log <- simulateResiduals(s.gauss_log, plot = TRUE, allow.new.levels = TRUE)
+
+
+
+
+# The simulate residuals function comes from DHARMa and allows visual inspection of
+# glmm fit. Another useful way of deciding which model you will use for this response variable.
+simulateResiduals(s.gauss,plot = TRUE) 
+
+check_model(s.gauss)
+
+
+```
+
+<br>
+##anova
+```{r}
+## `test_terms` is from monet and allows for a Type III anova for glmmTMB
+
+s.anova <- test_terms(formula = s~ system * entry + block, # fixed effects go here
+                                   data = ocs_soil_health_clean,
+                                   extra_formula = ~ (1|block:system), # random effects go here
+                                   fit_fun = glmmTMB,
+                                   fit_arg = list(family = gaussian()));s.anova 
+
+                               
+```
+
+<br>
+##means comparison
+```{r}
+# Define model object (you can swap in different ones)
+mod <- s.gauss
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+#T-tests
+##Soil_texture_sand
+```{r}
+
+
+# Load the data
+
+ocs_soil_health_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_soil_health_2022.xlsx")
+ocs_soil_health_raw$block <- as.factor(ocs_soil_health_raw$block)
+ocs_soil_health_raw$entry <- as.factor(ocs_soil_health_raw$entry)
+ocs_soil_health_raw$system <- as.factor(ocs_soil_health_raw$system)
+
+# Step 1: Create subsets
+alley_data <- ocs_soil_health_raw %>% filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw %>% filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw %>% filter(!system %in% c("Alley", "Corn"))
+
+# Subset
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- ocs_soil_health_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(soil_texture_sand, na.rm = TRUE),
+    alley_mean = mean(alley_data$soil_texture_sand, na.rm = TRUE),
+    p_value = t.test(alley_data$soil_texture_sand, soil_texture_sand)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- ocs_soil_health_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(soil_texture_sand, na.rm = TRUE),
+    alley_mean = mean(alley_data$soil_texture_sand, na.rm = TRUE),
+    p_value = t.test(alley_data$soil_texture_sand, soil_texture_sand)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- ocs_soil_health_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(soil_texture_sand, na.rm = TRUE),
+    alley_mean = mean(alley_data$soil_texture_sand, na.rm = TRUE),
+    p_value = t.test(alley_data$soil_texture_sand, soil_texture_sand)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- ocs_soil_health_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(soil_texture_sand, na.rm = TRUE),
+    corn_mean = mean(corn_data$soil_texture_sand, na.rm = TRUE),
+    p_value = t.test(corn_data$soil_texture_sand, soil_texture_sand)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- ocs_soil_health_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(soil_texture_sand, na.rm = TRUE),
+    corn_mean = mean(corn_data$soil_texture_sand, na.rm = TRUE),
+    p_value = t.test(corn_data$soil_texture_sand, soil_texture_sand)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- ocs_soil_health_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(soil_texture_sand, na.rm = TRUE),
+    corn_mean = mean(corn_data$soil_texture_sand, na.rm = TRUE),
+    p_value = t.test(corn_data$soil_texture_sand, soil_texture_sand)$p.value,
+    .groups = "drop"
+  )
+
+# View tables
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+tibble(
+  alley_mean = mean(alley_data$soil_texture_sand, na.rm = TRUE),
+  corn_mean  = mean(corn_data$soil_texture_sand, na.rm = TRUE),
+  p_value    = t.test(alley_data$soil_texture_sand, corn_data$soil_texture_sand)$p.value
+)
+
+```
+##Soil_texture_silt
+```{r}
+# Load the data
+
+ocs_soil_health_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_soil_health_2022.xlsx")
+ocs_soil_health_raw$block <- as.factor(ocs_soil_health_raw$block)
+ocs_soil_health_raw$entry <- as.factor(ocs_soil_health_raw$entry)
+ocs_soil_health_raw$system <- as.factor(ocs_soil_health_raw$system)
+
+# Step 1: Create subsets
+alley_data <- ocs_soil_health_raw %>% filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw %>% filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw %>% filter(!system %in% c("Alley", "Corn"))
+
+# Subset
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- ocs_soil_health_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(soil_texture_silt, na.rm = TRUE),
+    alley_mean = mean(alley_data$soil_texture_silt, na.rm = TRUE),
+    p_value = t.test(alley_data$soil_texture_silt, soil_texture_silt)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- ocs_soil_health_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(soil_texture_silt, na.rm = TRUE),
+    alley_mean = mean(alley_data$soil_texture_silt, na.rm = TRUE),
+    p_value = t.test(alley_data$soil_texture_silt, soil_texture_silt)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- ocs_soil_health_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(soil_texture_silt, na.rm = TRUE),
+    alley_mean = mean(alley_data$soil_texture_silt, na.rm = TRUE),
+    p_value = t.test(alley_data$soil_texture_silt, soil_texture_silt)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- ocs_soil_health_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(soil_texture_silt, na.rm = TRUE),
+    corn_mean = mean(corn_data$soil_texture_silt, na.rm = TRUE),
+    p_value = t.test(corn_data$soil_texture_silt, soil_texture_silt)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- ocs_soil_health_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(soil_texture_silt, na.rm = TRUE),
+    corn_mean = mean(corn_data$soil_texture_silt, na.rm = TRUE),
+    p_value = t.test(corn_data$soil_texture_silt, soil_texture_silt)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- ocs_soil_health_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(soil_texture_silt, na.rm = TRUE),
+    corn_mean = mean(corn_data$soil_texture_silt, na.rm = TRUE),
+    p_value = t.test(corn_data$soil_texture_silt, soil_texture_silt)$p.value,
+    .groups = "drop"
+  )
+
+# View tables
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+tibble(
+  alley_mean = mean(alley_data$soil_texture_silt, na.rm = TRUE),
+  corn_mean  = mean(corn_data$soil_texture_silt, na.rm = TRUE),
+  p_value    = t.test(alley_data$soil_texture_silt, corn_data$soil_texture_silt)$p.value
+)
+
+
+```
+
+##Soil_texture_clay
+```{r}
+# Load the data
+
+ocs_soil_health_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_soil_health_2022.xlsx")
+ocs_soil_health_raw$block <- as.factor(ocs_soil_health_raw$block)
+ocs_soil_health_raw$entry <- as.factor(ocs_soil_health_raw$entry)
+ocs_soil_health_raw$system <- as.factor(ocs_soil_health_raw$system)
+
+# Step 1: Create subsets
+alley_data <- ocs_soil_health_raw %>% filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw %>% filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw %>% filter(!system %in% c("Alley", "Corn"))
+
+# Subset
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- ocs_soil_health_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(soil_texture_clay, na.rm = TRUE),
+    alley_mean = mean(alley_data$soil_texture_clay, na.rm = TRUE),
+    p_value = t.test(alley_data$soil_texture_clay, soil_texture_clay)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- ocs_soil_health_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(soil_texture_clay, na.rm = TRUE),
+    alley_mean = mean(alley_data$soil_texture_clay, na.rm = TRUE),
+    p_value = t.test(alley_data$soil_texture_clay, soil_texture_clay)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- ocs_soil_health_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(soil_texture_clay, na.rm = TRUE),
+    alley_mean = mean(alley_data$soil_texture_clay, na.rm = TRUE),
+    p_value = t.test(alley_data$soil_texture_clay, soil_texture_clay)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- ocs_soil_health_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(soil_texture_clay, na.rm = TRUE),
+    corn_mean = mean(corn_data$soil_texture_clay, na.rm = TRUE),
+    p_value = t.test(corn_data$soil_texture_clay, soil_texture_clay)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- ocs_soil_health_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(soil_texture_clay, na.rm = TRUE),
+    corn_mean = mean(corn_data$soil_texture_clay, na.rm = TRUE),
+    p_value = t.test(corn_data$soil_texture_clay, soil_texture_clay)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- ocs_soil_health_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(soil_texture_clay, na.rm = TRUE),
+    corn_mean = mean(corn_data$soil_texture_clay, na.rm = TRUE),
+    p_value = t.test(corn_data$soil_texture_clay, soil_texture_clay)$p.value,
+    .groups = "drop"
+  )
+
+# View tables
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+tibble(
+  alley_mean = mean(alley_data$soil_texture_clay, na.rm = TRUE),
+  corn_mean  = mean(corn_data$soil_texture_clay, na.rm = TRUE),
+  p_value    = t.test(alley_data$soil_texture_clay, corn_data$soil_texture_clay)$p.value
+)
+
+
+```
+##pred_water_capacity
+```{r}
+# Load the data
+
+ocs_soil_health_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_soil_health_2022.xlsx")
+ocs_soil_health_raw$block <- as.factor(ocs_soil_health_raw$block)
+ocs_soil_health_raw$entry <- as.factor(ocs_soil_health_raw$entry)
+ocs_soil_health_raw$system <- as.factor(ocs_soil_health_raw$system)
+
+# Step 1: Create subsets
+alley_data <- ocs_soil_health_raw %>% filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw %>% filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw %>% filter(!system %in% c("Alley", "Corn"))
+
+# Subset
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- ocs_soil_health_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(pred_water_capacity, na.rm = TRUE),
+    alley_mean = mean(alley_data$pred_water_capacity, na.rm = TRUE),
+    p_value = t.test(alley_data$pred_water_capacity, pred_water_capacity)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- ocs_soil_health_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(pred_water_capacity, na.rm = TRUE),
+    alley_mean = mean(alley_data$pred_water_capacity, na.rm = TRUE),
+    p_value = t.test(alley_data$pred_water_capacity, pred_water_capacity)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- ocs_soil_health_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(pred_water_capacity, na.rm = TRUE),
+    alley_mean = mean(alley_data$pred_water_capacity, na.rm = TRUE),
+    p_value = t.test(alley_data$pred_water_capacity, pred_water_capacity)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- ocs_soil_health_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(pred_water_capacity, na.rm = TRUE),
+    corn_mean = mean(corn_data$pred_water_capacity, na.rm = TRUE),
+    p_value = t.test(corn_data$pred_water_capacity, pred_water_capacity)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- ocs_soil_health_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(pred_water_capacity, na.rm = TRUE),
+    corn_mean = mean(corn_data$pred_water_capacity, na.rm = TRUE),
+    p_value = t.test(corn_data$pred_water_capacity, pred_water_capacity)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- ocs_soil_health_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(pred_water_capacity, na.rm = TRUE),
+    corn_mean = mean(corn_data$pred_water_capacity, na.rm = TRUE),
+    p_value = t.test(corn_data$pred_water_capacity, pred_water_capacity)$p.value,
+    .groups = "drop"
+  )
+
+# View tables
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+tibble(
+  alley_mean = mean(alley_data$pred_water_capacity, na.rm = TRUE),
+  corn_mean  = mean(corn_data$pred_water_capacity, na.rm = TRUE),
+  p_value    = t.test(alley_data$pred_water_capacity, corn_data$pred_water_capacity)$p.value
+)
+
+
+```
+
+##surface_hardness
+```{r}
+# Load the data
+
+ocs_soil_health_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_soil_health_2022.xlsx")
+ocs_soil_health_raw$block <- as.factor(ocs_soil_health_raw$block)
+ocs_soil_health_raw$entry <- as.factor(ocs_soil_health_raw$entry)
+ocs_soil_health_raw$system <- as.factor(ocs_soil_health_raw$system)
+
+# Step 1: Create subsets
+alley_data <- ocs_soil_health_raw %>% filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw %>% filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw %>% filter(!system %in% c("Alley", "Corn"))
+
+# Subset
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- ocs_soil_health_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(surface_hardness, na.rm = TRUE),
+    alley_mean = mean(alley_data$surface_hardness, na.rm = TRUE),
+    p_value = t.test(alley_data$surface_hardness, surface_hardness)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- ocs_soil_health_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(surface_hardness, na.rm = TRUE),
+    alley_mean = mean(alley_data$surface_hardness, na.rm = TRUE),
+    p_value = t.test(alley_data$surface_hardness, surface_hardness)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- ocs_soil_health_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(surface_hardness, na.rm = TRUE),
+    alley_mean = mean(alley_data$surface_hardness, na.rm = TRUE),
+    p_value = t.test(alley_data$surface_hardness, surface_hardness)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- ocs_soil_health_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(surface_hardness, na.rm = TRUE),
+    corn_mean = mean(corn_data$surface_hardness, na.rm = TRUE),
+    p_value = t.test(corn_data$surface_hardness, surface_hardness)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- ocs_soil_health_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(surface_hardness, na.rm = TRUE),
+    corn_mean = mean(corn_data$surface_hardness, na.rm = TRUE),
+    p_value = t.test(corn_data$surface_hardness, surface_hardness)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- ocs_soil_health_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(surface_hardness, na.rm = TRUE),
+    corn_mean = mean(corn_data$surface_hardness, na.rm = TRUE),
+    p_value = t.test(corn_data$surface_hardness, surface_hardness)$p.value,
+    .groups = "drop"
+  )
+
+# View tables
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+tibble(
+  alley_mean = mean(alley_data$surface_hardness, na.rm = TRUE),
+  corn_mean  = mean(corn_data$surface_hardness, na.rm = TRUE),
+  p_value    = t.test(alley_data$surface_hardness, corn_data$surface_hardness)$p.value
+)
+
+
+```
+
+##subsurface_hardness
+```{r}
+## ---- SUBSET DATA ----
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(subsurface_hardness, na.rm = TRUE),
+    alley_mean = mean(alley_data$subsurface_hardness, na.rm = TRUE),
+    p_value = t.test(alley_data$subsurface_hardness, cur_data()$subsurface_hardness)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(subsurface_hardness, na.rm = TRUE),
+    alley_mean = mean(alley_data$subsurface_hardness, na.rm = TRUE),
+    p_value = t.test(alley_data$subsurface_hardness, cur_data()$subsurface_hardness)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(subsurface_hardness, na.rm = TRUE),
+    alley_mean = mean(alley_data$subsurface_hardness, na.rm = TRUE),
+    p_value = t.test(alley_data$subsurface_hardness, cur_data()$subsurface_hardness)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(subsurface_hardness, na.rm = TRUE),
+    corn_mean = mean(corn_data$subsurface_hardness, na.rm = TRUE),
+    p_value = t.test(corn_data$subsurface_hardness, cur_data()$subsurface_hardness)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(subsurface_hardness, na.rm = TRUE),
+    corn_mean = mean(corn_data$subsurface_hardness, na.rm = TRUE),
+    p_value = t.test(corn_data$subsurface_hardness, cur_data()$subsurface_hardness)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(subsurface_hardness, na.rm = TRUE),
+    corn_mean = mean(corn_data$subsurface_hardness, na.rm = TRUE),
+    p_value = t.test(corn_data$subsurface_hardness, cur_data()$subsurface_hardness)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_mean = mean(alley_data$subsurface_hardness, na.rm = TRUE),
+  corn_mean  = mean(corn_data$subsurface_hardness, na.rm = TRUE),
+  p_value    = t.test(alley_data$subsurface_hardness, corn_data$subsurface_hardness)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+
+
+```
+
+##aggregate_stability
+```{r}
+## ---- SUBSET DATA ----
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(aggregate_stability, na.rm = TRUE),
+    alley_mean = mean(alley_data$aggregate_stability, na.rm = TRUE),
+    p_value = t.test(alley_data$aggregate_stability, cur_data()$aggregate_stability)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(aggregate_stability, na.rm = TRUE),
+    alley_mean = mean(alley_data$aggregate_stability, na.rm = TRUE),
+    p_value = t.test(alley_data$aggregate_stability, cur_data()$aggregate_stability)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(aggregate_stability, na.rm = TRUE),
+    alley_mean = mean(alley_data$aggregate_stability, na.rm = TRUE),
+    p_value = t.test(alley_data$aggregate_stability, cur_data()$aggregate_stability)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(aggregate_stability, na.rm = TRUE),
+    corn_mean = mean(corn_data$aggregate_stability, na.rm = TRUE),
+    p_value = t.test(corn_data$aggregate_stability, cur_data()$aggregate_stability)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(aggregate_stability, na.rm = TRUE),
+    corn_mean = mean(corn_data$aggregate_stability, na.rm = TRUE),
+    p_value = t.test(corn_data$aggregate_stability, cur_data()$aggregate_stability)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(aggregate_stability, na.rm = TRUE),
+    corn_mean = mean(corn_data$aggregate_stability, na.rm = TRUE),
+    p_value = t.test(corn_data$aggregate_stability, cur_data()$aggregate_stability)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_mean = mean(alley_data$aggregate_stability, na.rm = TRUE),
+  corn_mean  = mean(corn_data$aggregate_stability, na.rm = TRUE),
+  p_value    = t.test(alley_data$aggregate_stability, corn_data$aggregate_stability)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+
+
+```
+
+##organic_matter
+```{r}
+## ---- SUBSET DATA ----
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(organic_matter, na.rm = TRUE),
+    alley_mean = mean(alley_data$organic_matter, na.rm = TRUE),
+    p_value = t.test(alley_data$organic_matter, cur_data()$organic_matter)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(organic_matter, na.rm = TRUE),
+    alley_mean = mean(alley_data$organic_matter, na.rm = TRUE),
+    p_value = t.test(alley_data$organic_matter, cur_data()$organic_matter)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(organic_matter, na.rm = TRUE),
+    alley_mean = mean(alley_data$organic_matter, na.rm = TRUE),
+    p_value = t.test(alley_data$organic_matter, cur_data()$organic_matter)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(organic_matter, na.rm = TRUE),
+    corn_mean = mean(corn_data$organic_matter, na.rm = TRUE),
+    p_value = t.test(corn_data$organic_matter, cur_data()$organic_matter)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(organic_matter, na.rm = TRUE),
+    corn_mean = mean(corn_data$organic_matter, na.rm = TRUE),
+    p_value = t.test(corn_data$organic_matter, cur_data()$organic_matter)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(organic_matter, na.rm = TRUE),
+    corn_mean = mean(corn_data$organic_matter, na.rm = TRUE),
+    p_value = t.test(corn_data$organic_matter, cur_data()$organic_matter)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_mean = mean(alley_data$organic_matter, na.rm = TRUE),
+  corn_mean  = mean(corn_data$organic_matter, na.rm = TRUE),
+  p_value    = t.test(alley_data$organic_matter, corn_data$organic_matter)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+
+
+```
+
+##soc
+```{r}
+## ---- SUBSET DATA ----
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(soc, na.rm = TRUE),
+    alley_mean = mean(alley_data$soc, na.rm = TRUE),
+    p_value = t.test(alley_data$soc, cur_data()$soc)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(soc, na.rm = TRUE),
+    alley_mean = mean(alley_data$soc, na.rm = TRUE),
+    p_value = t.test(alley_data$soc, cur_data()$soc)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(soc, na.rm = TRUE),
+    alley_mean = mean(alley_data$soc, na.rm = TRUE),
+    p_value = t.test(alley_data$soc, cur_data()$soc)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(soc, na.rm = TRUE),
+    corn_mean = mean(corn_data$soc, na.rm = TRUE),
+    p_value = t.test(corn_data$soc, cur_data()$soc)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(soc, na.rm = TRUE),
+    corn_mean = mean(corn_data$soc, na.rm = TRUE),
+    p_value = t.test(corn_data$soc, cur_data()$soc)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(soc, na.rm = TRUE),
+    corn_mean = mean(corn_data$soc, na.rm = TRUE),
+    p_value = t.test(corn_data$soc, cur_data()$soc)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_mean = mean(alley_data$soc, na.rm = TRUE),
+  corn_mean  = mean(corn_data$soc, na.rm = TRUE),
+  p_value    = t.test(alley_data$soc, corn_data$soc)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+
+
+```
+##total_c
+```{r}
+## ---- SUBSET DATA ----
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(total_c, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_c, na.rm = TRUE),
+    p_value = t.test(alley_data$total_c, cur_data()$total_c)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(total_c, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_c, na.rm = TRUE),
+    p_value = t.test(alley_data$total_c, cur_data()$total_c)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(total_c, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_c, na.rm = TRUE),
+    p_value = t.test(alley_data$total_c, cur_data()$total_c)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(total_c, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_c, na.rm = TRUE),
+    p_value = t.test(corn_data$total_c, cur_data()$total_c)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(total_c, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_c, na.rm = TRUE),
+    p_value = t.test(corn_data$total_c, cur_data()$total_c)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(total_c, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_c, na.rm = TRUE),
+    p_value = t.test(corn_data$total_c, cur_data()$total_c)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_mean = mean(alley_data$total_c, na.rm = TRUE),
+  corn_mean  = mean(corn_data$total_c, na.rm = TRUE),
+  p_value    = t.test(alley_data$total_c, corn_data$total_c)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+
+
+```
+
+##total_n
+```{r}
+## ---- SUBSET DATA ----
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(total_n, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_n, na.rm = TRUE),
+    p_value = t.test(alley_data$total_n, cur_data()$total_n)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(total_n, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_n, na.rm = TRUE),
+    p_value = t.test(alley_data$total_n, cur_data()$total_n)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(total_n, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_n, na.rm = TRUE),
+    p_value = t.test(alley_data$total_n, cur_data()$total_n)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(total_n, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_n, na.rm = TRUE),
+    p_value = t.test(corn_data$total_n, cur_data()$total_n)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(total_n, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_n, na.rm = TRUE),
+    p_value = t.test(corn_data$total_n, cur_data()$total_n)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(total_n, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_n, na.rm = TRUE),
+    p_value = t.test(corn_data$total_n, cur_data()$total_n)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_mean = mean(alley_data$total_n, na.rm = TRUE),
+  corn_mean  = mean(corn_data$total_n, na.rm = TRUE),
+  p_value    = t.test(alley_data$total_n, corn_data$total_n)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+
+
 ```
 
 ##pred_soil_protein
+
 ```{r}
-pred_soil_protein.gauss<- glmmTMB(pred_soil_protein~ treatments * entry + block + (1 | block:treatments),
-                      data = ocs_soil_health_clean,
-                      family = gaussian())
+## ---- SUBSET DATA ----
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
 
+## ---- ALLEYWAY COMPARISONS ----
 
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(pred_soil_protein, na.rm = TRUE),
+    alley_mean = mean(alley_data$pred_soil_protein, na.rm = TRUE),
+    p_value = t.test(alley_data$pred_soil_protein, cur_data()$pred_soil_protein)$p.value,
+    .groups = "drop"
+  )
 
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(pred_soil_protein, na.rm = TRUE),
+    alley_mean = mean(alley_data$pred_soil_protein, na.rm = TRUE),
+    p_value = t.test(alley_data$pred_soil_protein, cur_data()$pred_soil_protein)$p.value,
+    .groups = "drop"
+  )
 
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(pred_soil_protein, na.rm = TRUE),
+    alley_mean = mean(alley_data$pred_soil_protein, na.rm = TRUE),
+    p_value = t.test(alley_data$pred_soil_protein, cur_data()$pred_soil_protein)$p.value,
+    .groups = "drop"
+  )
 
-pred_soil_protein.gamma <- glmmTMB(pred_soil_protein~ treatments * entry + block + (1 | block:treatments),
-                                     data = ocs_soil_health_clean,
-                                     family = Gamma(link = "log"))
+## ---- CORN FIELD COMPARISONS ----
 
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(pred_soil_protein, na.rm = TRUE),
+    corn_mean = mean(corn_data$pred_soil_protein, na.rm = TRUE),
+    p_value = t.test(corn_data$pred_soil_protein, cur_data()$pred_soil_protein)$p.value,
+    .groups = "drop"
+  )
 
-#look at the AIC
-AIC(pred_soil_protein.gauss,pred_soil_protein.gamma )
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(pred_soil_protein, na.rm = TRUE),
+    corn_mean = mean(corn_data$pred_soil_protein, na.rm = TRUE),
+    p_value = t.test(corn_data$pred_soil_protein, cur_data()$pred_soil_protein)$p.value,
+    .groups = "drop"
+  )
 
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(pred_soil_protein, na.rm = TRUE),
+    corn_mean = mean(corn_data$pred_soil_protein, na.rm = TRUE),
+    p_value = t.test(corn_data$pred_soil_protein, cur_data()$pred_soil_protein)$p.value,
+    .groups = "drop"
+  )
 
+## ---- ALLEY VS CORN COMPARISON ----
 
-# The simulate residuals function comes from DHARMa and allows visual inspection of
-# glmm fit. Another useful way of deciding which model you will use for this response variable.
-simulateResiduals(pred_soil_protein.gamma,plot = TRUE) 
+alley_vs_corn <- tibble(
+  alley_mean = mean(alley_data$pred_soil_protein, na.rm = TRUE),
+  corn_mean  = mean(corn_data$pred_soil_protein, na.rm = TRUE),
+  p_value    = t.test(alley_data$pred_soil_protein, corn_data$pred_soil_protein)$p.value
+)
 
-check_model(pred_soil_protein.gamma)
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
 
 
 ```
-###monet annova 
-### Notsignificant
+
+##respiration
 
 ```{r}
-#`test_terms` is from monet and allows for a Type III anova for glmmTMB
+## ---- SUBSET DATA ----
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
 
-pred_soil_protein.gamma.anova <- test_terms(formula = pred_soil_protein~ treatments * entry +block, #fixed effects go here
-                                   data = ocs_soil_health_clean,
-                                   extra_formula = ~ (1|block:treatments), # random effects go here
-                                   fit_fun = glmmTMB,
-                                   fit_arg = list(Gamma(link = "log"))); pred_soil_protein.gamma.anova # put the family you decided on in the fit_arg
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(respiration, na.rm = TRUE),
+    alley_mean = mean(alley_data$respiration, na.rm = TRUE),
+    p_value = t.test(alley_data$respiration, cur_data()$respiration)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(respiration, na.rm = TRUE),
+    alley_mean = mean(alley_data$respiration, na.rm = TRUE),
+    p_value = t.test(alley_data$respiration, cur_data()$respiration)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(respiration, na.rm = TRUE),
+    alley_mean = mean(alley_data$respiration, na.rm = TRUE),
+    p_value = t.test(alley_data$respiration, cur_data()$respiration)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(respiration, na.rm = TRUE),
+    corn_mean = mean(corn_data$respiration, na.rm = TRUE),
+    p_value = t.test(corn_data$respiration, cur_data()$respiration)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(respiration, na.rm = TRUE),
+    corn_mean = mean(corn_data$respiration, na.rm = TRUE),
+    p_value = t.test(corn_data$respiration, cur_data()$respiration)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(respiration, na.rm = TRUE),
+    corn_mean = mean(corn_data$respiration, na.rm = TRUE),
+    p_value = t.test(corn_data$respiration, cur_data()$respiration)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_mean = mean(alley_data$respiration, na.rm = TRUE),
+  corn_mean  = mean(corn_data$respiration, na.rm = TRUE),
+  p_value    = t.test(alley_data$respiration, corn_data$respiration)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+
+
+```
+
+##Active Carbon
+
+```{r}
+## ---- SUBSET DATA ----
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(active_carbon, na.rm = TRUE),
+    alley_mean = mean(alley_data$active_carbon, na.rm = TRUE),
+    p_value = t.test(alley_data$active_carbon, cur_data()$active_carbon)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(active_carbon, na.rm = TRUE),
+    alley_mean = mean(alley_data$active_carbon, na.rm = TRUE),
+    p_value = t.test(alley_data$active_carbon, cur_data()$active_carbon)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(active_carbon, na.rm = TRUE),
+    alley_mean = mean(alley_data$active_carbon, na.rm = TRUE),
+    p_value = t.test(alley_data$active_carbon, cur_data()$active_carbon)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(active_carbon, na.rm = TRUE),
+    corn_mean = mean(corn_data$active_carbon, na.rm = TRUE),
+    p_value = t.test(corn_data$active_carbon, cur_data()$active_carbon)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(active_carbon, na.rm = TRUE),
+    corn_mean = mean(corn_data$active_carbon, na.rm = TRUE),
+    p_value = t.test(corn_data$active_carbon, cur_data()$active_carbon)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(active_carbon, na.rm = TRUE),
+    corn_mean = mean(corn_data$active_carbon, na.rm = TRUE),
+    p_value = t.test(corn_data$active_carbon, cur_data()$active_carbon)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_mean = mean(alley_data$active_carbon, na.rm = TRUE),
+  corn_mean  = mean(corn_data$active_carbon, na.rm = TRUE),
+  p_value    = t.test(alley_data$active_carbon, corn_data$active_carbon)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+
+
+```
+
+##ph
+
+```{r}
+## ---- SUBSET DATA ----
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(ph, na.rm = TRUE),
+    alley_mean = mean(alley_data$ph, na.rm = TRUE),
+    p_value = t.test(alley_data$ph, cur_data()$ph)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(ph, na.rm = TRUE),
+    alley_mean = mean(alley_data$ph, na.rm = TRUE),
+    p_value = t.test(alley_data$ph, cur_data()$ph)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(ph, na.rm = TRUE),
+    alley_mean = mean(alley_data$ph, na.rm = TRUE),
+    p_value = t.test(alley_data$ph, cur_data()$ph)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(ph, na.rm = TRUE),
+    corn_mean = mean(corn_data$ph, na.rm = TRUE),
+    p_value = t.test(corn_data$ph, cur_data()$ph)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(ph, na.rm = TRUE),
+    corn_mean = mean(corn_data$ph, na.rm = TRUE),
+    p_value = t.test(corn_data$ph, cur_data()$ph)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(ph, na.rm = TRUE),
+    corn_mean = mean(corn_data$ph, na.rm = TRUE),
+    p_value = t.test(corn_data$ph, cur_data()$ph)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_mean = mean(alley_data$ph, na.rm = TRUE),
+  corn_mean  = mean(corn_data$ph, na.rm = TRUE),
+  p_value    = t.test(alley_data$ph, corn_data$ph)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+
+
+```
+
+##p
+
+```{r}
+## ---- SUBSET DATA & TRANSFORM ----
+ocs_soil_health_raw <- ocs_soil_health_raw |> 
+  mutate(log_p = log(p))
+
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_p, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_p, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_p, cur_data()$log_p)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_p, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_p, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_p, cur_data()$log_p)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_p, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_p, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_p, cur_data()$log_p)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_p, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_p, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_p, cur_data()$log_p)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_p, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_p, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_p, cur_data()$log_p)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_p, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_p, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_p, cur_data()$log_p)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_log_mean = mean(alley_data$log_p, na.rm = TRUE),
+  corn_log_mean  = mean(corn_data$log_p, na.rm = TRUE),
+  alley_mean = exp(alley_log_mean),
+  corn_mean  = exp(corn_log_mean),
+  p_value    = t.test(alley_data$log_p, corn_data$log_p)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
 ```
 
 
-
-
-
-#Loop attempt
+##k
 
 ```{r}
-## Select column names from soil_texture_sand to overall_score
-soil_health_params <- names(ocs_soil_health_clean)[8:45]
 
-# Create an empty list to store model results
-soil_health_models <- list()
+## ---- SUBSET DATA & TRANSFORM ----
+ocs_soil_health_raw <- ocs_soil_health_raw |> 
+  mutate(log_k = log(k))
 
-# Loop through each soil health parameter and fit the model
-for (param in soil_health_params) {
-  formula <- as.formula(paste(param, "~ treatments * entry + block + (1 | block:treatments)"))
-  
-  # Fit the model
-  soil_health_models[[param]] <- glmmTMB(formula, 
-                                         data = ocs_soil_health_clean, 
-                                         family = gaussian())
-}
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
 
-# Print summaries for all models
-walk2(soil_health_models, names(soil_health_models), ~ {
-  cat("\n*** Summary for:", .y, "***\n")
-  print(summary(.x))
-})
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_k, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_k, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_k, cur_data()$log_k)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_k, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_k, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_k, cur_data()$log_k)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_k, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_k, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_k, cur_data()$log_k)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_k, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_k, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_k, cur_data()$log_k)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_k, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_k, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_k, cur_data()$log_k)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_k, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_k, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_k, cur_data()$log_k)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_log_mean = mean(alley_data$log_k, na.rm = TRUE),
+  corn_log_mean  = mean(corn_data$log_k, na.rm = TRUE),
+  alley_mean = exp(alley_log_mean),
+  corn_mean  = exp(corn_log_mean),
+  p_value    = t.test(alley_data$log_k, corn_data$log_k)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
 
 ```
 
+##mg
 
-
-
-### Joint test (anova)
 ```{r}
-glmm_ja |> 
-  joint_tests() |> 
-  kable()  
+
+## ---- SUBSET DATA & TRANSFORM ----
+ocs_soil_health_raw <- ocs_soil_health_raw |> 
+  mutate(log_mg = log(mg))
+
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_mg, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_mg, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_mg, cur_data()$log_mg)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_mg, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_mg, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_mg, cur_data()$log_mg)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_mg, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_mg, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_mg, cur_data()$log_mg)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_mg, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_mg, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_mg, cur_data()$log_mg)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_mg, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_mg, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_mg, cur_data()$log_mg)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_mg, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_mg, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_mg, cur_data()$log_mg)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_log_mean = mean(alley_data$log_mg, na.rm = TRUE),
+  corn_log_mean  = mean(corn_data$log_mg, na.rm = TRUE),
+  alley_mean = exp(alley_log_mean),
+  corn_mean  = exp(corn_log_mean),
+  p_value    = t.test(alley_data$log_mg, corn_data$log_mg)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
 ```
 
-### Fisher compact letter display
-####  treatments (significant)
+##fe
 
 ```{r}
-cld_treatments_fisher <-cld(emmeans(glmm_ja, ~  treatments , type = "response"), Letters = letters, adjust = "none",sort = TRUE, reversed=TRUE)
-cld_treatments_fisher 
+
+## ---- SUBSET DATA & TRANSFORM ----
+ocs_soil_health_raw <- ocs_soil_health_raw |> 
+  mutate(log_fe = log(fe))
+
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_fe, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_fe, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_fe, cur_data()$log_fe)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_fe, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_fe, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_fe, cur_data()$log_fe)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_fe, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_fe, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_fe, cur_data()$log_fe)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_fe, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_fe, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_fe, cur_data()$log_fe)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_fe, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_fe, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_fe, cur_data()$log_fe)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_fe, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_fe, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_fe, cur_data()$log_fe)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_log_mean = mean(alley_data$log_fe, na.rm = TRUE),
+  corn_log_mean  = mean(corn_data$log_fe, na.rm = TRUE),
+  alley_mean = exp(alley_log_mean),
+  corn_mean  = exp(corn_log_mean),
+  p_value    = t.test(alley_data$log_fe, corn_data$log_fe)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+```
+
+##mn
+
+```{r}
+
+## ---- SUBSET DATA & TRANSFORM ----
+ocs_soil_health_raw <- ocs_soil_health_raw |> 
+  mutate(log_mn = log(mn))
+
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_mn, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_mn, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_mn, cur_data()$log_mn)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_mn, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_mn, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_mn, cur_data()$log_mn)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_mn, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_mn, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_mn, cur_data()$log_mn)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_mn, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_mn, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_mn, cur_data()$log_mn)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_mn , na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_mn, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_mn, cur_data()$log_mn)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_mn, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_mn, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_mn, cur_data()$log_mn)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_log_mean = mean(alley_data$log_mn, na.rm = TRUE),
+  corn_log_mean  = mean(corn_data$log_mn, na.rm = TRUE),
+  alley_mean = exp(alley_log_mean),
+  corn_mean  = exp(corn_log_mean),
+  p_value    = t.test(alley_data$log_mn, corn_data$log_mn)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+```
+##zn
+
+```{r}
+
+## ---- SUBSET DATA & TRANSFORM ----
+ocs_soil_health_raw <- ocs_soil_health_raw |> 
+  mutate(log_zn = log(zn))
+
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_zn, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_zn, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_zn, cur_data()$log_zn)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_zn, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_zn, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_zn, cur_data()$log_zn)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_zn, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_zn, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_zn, cur_data()$log_zn)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_mn, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_mn, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_zn, cur_data()$log_zn)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_zn , na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_zn, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_zn, cur_data()$log_zn)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_zn, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_zn, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_zn, cur_data()$log_zn)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_log_mean = mean(alley_data$log_zn, na.rm = TRUE),
+  corn_log_mean  = mean(corn_data$log_zn, na.rm = TRUE),
+  alley_mean = exp(alley_log_mean),
+  corn_mean  = exp(corn_log_mean),
+  p_value    = t.test(alley_data$log_zn, corn_data$log_zn)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+```
+
+##al
+
+```{r}
+
+## ---- SUBSET DATA & TRANSFORM ----
+ocs_soil_health_raw <- ocs_soil_health_raw |> 
+  mutate(log_al = log(al))
+
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_al, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_al, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_al, cur_data()$log_al)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_al, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_al, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_al, cur_data()$log_al)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_al, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_al, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_al, cur_data()$log_al)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_al, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_al, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_al, cur_data()$log_al)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_al , na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_al, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_al, cur_data()$log_al)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_al, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_al, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_al, cur_data()$log_al)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_log_mean = mean(alley_data$log_al, na.rm = TRUE),
+  corn_log_mean  = mean(corn_data$log_al, na.rm = TRUE),
+  alley_mean = exp(alley_log_mean),
+  corn_mean  = exp(corn_log_mean),
+  p_value    = t.test(alley_data$log_al, corn_data$log_al)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+```
+
+##ca
+
+```{r}
+
+## ---- SUBSET DATA & TRANSFORM ----
+ocs_soil_health_raw <- ocs_soil_health_raw |> 
+  mutate(log_ca = log(ca))
+
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_ca, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_ca, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_ca, cur_data()$log_ca)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_ca, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_ca, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_ca, cur_data()$log_ca)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_ca, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_ca, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_ca, cur_data()$log_ca)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_ca, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_ca, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_ca, cur_data()$log_ca)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_ca , na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_ca, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_ca, cur_data()$log_ca)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_ca, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_ca, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_ca, cur_data()$log_ca)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_log_mean = mean(alley_data$log_ca, na.rm = TRUE),
+  corn_log_mean  = mean(corn_data$log_ca, na.rm = TRUE),
+  alley_mean = exp(alley_log_mean),
+  corn_mean  = exp(corn_log_mean),
+  p_value    = t.test(alley_data$log_ca, corn_data$log_ca)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+```
+
+##cu
+
+```{r}
+## ---- SUBSET DATA ----
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(cu, na.rm = TRUE),
+    alley_mean = mean(alley_data$cu, na.rm = TRUE),
+    p_value = t.test(alley_data$cu, cur_data()$cu)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(cu, na.rm = TRUE),
+    alley_mean = mean(alley_data$cu, na.rm = TRUE),
+    p_value = t.test(alley_data$cu, cur_data()$cu)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(cu, na.rm = TRUE),
+    alley_mean = mean(alley_data$cu, na.rm = TRUE),
+    p_value = t.test(alley_data$cu, cur_data()$cu)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(cu, na.rm = TRUE),
+    corn_mean = mean(corn_data$cu, na.rm = TRUE),
+    p_value = t.test(corn_data$cu, cur_data()$cu)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(cu, na.rm = TRUE),
+    corn_mean = mean(corn_data$cu, na.rm = TRUE),
+    p_value = t.test(corn_data$cu, cur_data()$cu)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(cu, na.rm = TRUE),
+    corn_mean = mean(corn_data$cu, na.rm = TRUE),
+    p_value = t.test(corn_data$cu, cur_data()$cu)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_mean = mean(alley_data$cu, na.rm = TRUE),
+  corn_mean  = mean(corn_data$cu, na.rm = TRUE),
+  p_value    = t.test(alley_data$cu, corn_data$cu)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
+
+
+```
+
+##s
+
+```{r}
+
+## ---- SUBSET DATA & TRANSFORM ----
+ocs_soil_health_raw <- ocs_soil_health_raw |> 
+  mutate(log_s = log(s))
+
+alley_data <- ocs_soil_health_raw |> filter(system == "Alley")
+corn_data  <- ocs_soil_health_raw |> filter(system == "Corn")
+treatment_data <- ocs_soil_health_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_s, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_s, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_s, cur_data()$log_s)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_s, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_s, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_s, cur_data()$log_s)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_s, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    alley_log_mean = mean(alley_data$log_s, na.rm = TRUE),
+    alley_mean = exp(alley_log_mean),
+    p_value = t.test(alley_data$log_s, cur_data()$log_s)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- treatment_data |>
+  group_by(system) |>
+  summarise(
+    treatment_log_mean = mean(log_s, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_s, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_s, cur_data()$log_s)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- treatment_data |>
+  group_by(entry) |>
+  summarise(
+    treatment_log_mean = mean(log_s , na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_s, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_s, cur_data()$log_s)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- treatment_data |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_log_mean = mean(log_s, na.rm = TRUE),
+    treatment_mean = exp(treatment_log_mean),
+    corn_log_mean = mean(corn_data$log_s, na.rm = TRUE),
+    corn_mean = exp(corn_log_mean),
+    p_value = t.test(corn_data$log_s, cur_data()$log_s)$p.value,
+    .groups = "drop"
+  )
+
+## ---- ALLEY VS CORN COMPARISON ----
+
+alley_vs_corn <- tibble(
+  alley_log_mean = mean(alley_data$log_s, na.rm = TRUE),
+  corn_log_mean  = mean(corn_data$log_s, na.rm = TRUE),
+  alley_mean = exp(alley_log_mean),
+  corn_mean  = exp(corn_log_mean),
+  p_value    = t.test(alley_data$log_s, corn_data$log_s)$p.value
+)
+
+## ---- OUTPUT ----
+
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+alley_vs_corn
+
 ```
