@@ -73,7 +73,8 @@ test_glmm_models <- function(response_var, data) {
     binom2 = glmmTMB(formula, family = nbinom2(link = "log"), data = data),
     poiss = glmmTMB(formula, family = poisson(link = "log"), data = data),
     tweedie = glmmTMB(formula, family = tweedie(link = "log"), data = data),
-    zi = glmmTMB(formula, family = nbinom1(link = "log"), ziformula = ~ 1, data = data)
+    zi = glmmTMB(formula, family = nbinom1(link = "log"), ziformula = ~1, data = data),
+    zi_tweedie = glmmTMB(formula, family = tweedie(link = "log"), ziformula = ~1, data = data)  # NEW MODEL
   )
 
   # Overdispersion check (using nbinom1)
@@ -88,20 +89,20 @@ test_glmm_models <- function(response_var, data) {
   cat("Zero Inflation Test p-value:", zi_test$p.value, "\n")
   
   # Compare models using AIC
-  aic_results <- AIC(models$binom1, models$binom2, models$poiss, models$tweedie, models$zi)
+  aic_results <- AIC(models$binom1, models$binom2, models$poiss, models$tweedie, models$zi, models$zi_tweedie)  # UPDATED
   print(aic_results)
 
   # Plot residual diagnostics
   plot(sim_residuals)
   
   # Check model fit visually
-  check_model(models$binom1)  # Works with `performance` package
+  check_model(models$binom1)  # Still using binom1 as your base for diagnostics
   
-  return(models)  # Return models in case you want to use them later
+  return(models)  # Return all models
 }
 
 ```
-###total_organisms
+###Organisms
 
 ```{r}
 models_total_organisms <- test_glmm_models("total_organisms", ocs_invertebrates_clean)
@@ -119,31 +120,113 @@ total_organisms.binom1.anova <- test_terms(formula = total_organisms ~ system * 
 ```
 <br>
 
-####post-hoc
+####Means comparisons
 ```{r}
-# Perform post-hoc analysis using emmeans if indicated by the ANOVA  
-total_organisms.emm <- emmeans(models_total_organisms$binom1, ~system, type="response")
+# Define model object (you can swap in different ones)
+mod <- models_total_organisms$binom1 
 
-# Run pairwise comparisons with Tukey adjustment
-tukey_results <- pairs(total_organisms.emm, adjust = "tukey")
-print(tukey_results)  # Check the pairwise comparisons
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
 
-# Generate CLD output with Tukey adjustment
-library(multcompView)
-cld_total_organisms <- cld(total_organisms.emm, Letters = letters, adjust = "tukey", sort = TRUE, reversed = TRUE)
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
 
-# Print the CLD results
-print(cld_total_organisms)
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+####Figures
+```{r}
+ocs_invertebrates_clean |> 
+  left_join(cld_results_lsd$system_entry) |> 
+  ggplot(aes(x = factor(system, levels = c("HF", "LF", "EWM", "RT")), 
+             y = response, fill = system)) +
+  facet_wrap(~entry, labeller = labeller(
+    entry = c("A" = "Entry Point A", "B" = "Entry Point B")
+  )) +
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  geom_errorbar(aes(ymin = response - SE, ymax = response + SE), 
+                width = 0.2, position = position_dodge(0.9)) +
+  #geom_text(aes(label = trimws(.group), y = response + SE + 1.5), 
+            #size = 7) +
+  labs(
+    x = "",
+    y = expression("Density" ~ (individuals ~ kg^{-1} ~ "dry soil")),
+    subtitle = expression(italic("Not significant"))
+  ) +
+  scale_x_discrete(labels = c("High\nfertility", "Low\nfertility", 
+                              "Enhanced\nweed\nmanagement", "Reduced\ntillage")) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.3))) +
+  scale_fill_WB_d(name = "BlueberriesForSal", direction = 1) +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 12),
+    axis.title = element_text(size = 24),
+    axis.text = element_text(size = 16),
+    plot.subtitle = element_text(size = 24, face = "italic")
+  )
+ggsave("total_organisms_kg.png", width = 10, height = 6, dpi = 300)
 ```
 
 <br>
 
-###total_collembola
+###Collembola
 
 ```{r}
 models_total_collembola <- test_glmm_models("total_collembola", ocs_invertebrates_clean)
-
 ```
+
 ####Anova (not significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
@@ -155,17 +238,87 @@ total_collembola.binom1.anova <- test_terms(formula = total_collembola ~ system 
 ```
 <br>
 
-###entomobryidae (no models are converging)
+####Means comparisons
 ```{r}
-models_entomobryidae <- test_glmm_models("entomobryidae", ocs_invertebrates_clean)
+# Define model object (you can swap in different ones)
+mod <- models_total_collembola$binom1 
 
-sum(ocs_invertebrates_clean$entomobryidae == 0)  # Observed zeros
-sum(sim_zeros$simulatedResponse == 0)  # Simulated zeros under NB model
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
 ```
 
 <br>
 
-###isotomidae 
+###Entomobryidae (Too little data for now)
+```{r}
+models_entomobryidae <- test_glmm_models("entomobryidae", ocs_invertebrates_clean)
+
+sum(ocs_invertebrates_clean$entomobryidae == 0)  # Observed zeros
+
+ocs_invertebrates_clean$log_entomo <- log(ocs_invertebrates_clean$entomobryidae + 1)
+lm_model <- lm(log_entomo ~ system * entry + block, data = ocs_invertebrates_clean)
+summary(lm_model)
+
+```
+
+<br>
+
+###Isotomidae 
 ```{r}
 models_isotomidae <- test_glmm_models("isotomidae", ocs_invertebrates_clean)
 
@@ -176,38 +329,92 @@ models_isotomidae <- test_glmm_models("isotomidae", ocs_invertebrates_clean)
 ####anova (not significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
-isotomidae.binom1.anova <- test_terms(formula = isotomidae ~ treatments * entry + block, # fixed effects go here
+isotomidae.tweedie.anova <- test_terms(formula = isotomidae ~ system * entry + block, # fixed effects go here
                                            data = ocs_invertebrates_clean,
-                                           extra_formula = ~ (1|block:treatments), # random effects go here
+                                           extra_formula = ~ (1|block:system), # random effects go here
                                            fit_fun = glmmTMB,
-                                           fit_arg = list(family=nbinom1(link="log"))); isotomidae.binom1.anova # put the family you decided on in the fit_arg
+                                           fit_arg = list(family=tweedie(link="log"))); isotomidae.tweedie.anova # put the family you decided on in the fit_arg
 ```
-
 <br>
 
-###onychiuridae (treatment is significant)
+####Means comparisons
+```{r}
+# Define model object (you can swap in different ones)
+mod <- models_isotomidae$tweedie 
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+<br>
+
+###Onychiuridae (treatment is significant)
+
+
 ```{r}
 models_onychiuridae  <- test_glmm_models("onychiuridae ", ocs_invertebrates_clean)
 
-onychiuridae.tweedie <- glmmTMB(
- onychiuridae ~ treatments * entry + block + (1 | block:treatments),
-  family = tweedie(link = "log"),
-  data = ocs_invertebrates_clean
-)
-
-onychiuridae_zi <- glmmTMB(
-  onychiuridae ~ treatments * entry + block + (1 | block:treatments),
-  family = nbinom1(link = "log"),
-  ziformula = ~ 1,  # Tests if zero inflation is needed
-  data = ocs_invertebrates_clean
-)
 
 # Diagnostic residual plots (for best model selection)
 res.onychiuridae <- simulateResiduals(onychiuridae.tweedie, n = 1000, integerResponse = FALSE)
 plot(res.onychiuridae)
 
 # Check overall model fit visually
-check_model(onychiuridae.tweedie)  # Works with `performance` package
+check_model(models_onychiuridae$zi_tweedie)  # Works with `performance` package
 
 ```
 
@@ -215,37 +422,97 @@ check_model(onychiuridae.tweedie)  # Works with `performance` package
 ######anova (significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
-onychiuridae.tweedie.anova <- test_terms(formula = onychiuridae ~ treatments * entry + block, # fixed effects go here
-                                           data = ocs_invertebrates_clean,
-                                           extra_formula = ~ (1|block:treatments), # random effects go here
-                                           fit_fun = glmmTMB,
-                                           fit_arg = list(family=tweedie(link="log"))); onychiuridae.tweedie.anova # put the family you decided on in the fit_arg
-```
+onychiuridae.tweedie.anova <- test_terms(
+  formula = onychiuridae ~ system * entry + block,  # fixed effects
+  data = ocs_invertebrates_clean,
+  extra_formula = ~ (1 | block:system),  # random effects
+  fit_fun = glmmTMB,
+  fit_arg = list(
+    family = tweedie(link = "log")
+    #ziformula = ~1  # zero-inflation model with intercept
+  )
+)
 
-######post-hoc
+onychiuridae.tweedie.anova
+```
+####Means comparisons
 ```{r}
-# Then move on to post-hoc using emmeans if indicated by the ANOVA. 
-onychiuridae.emm <- emmeans(onychiuridae.tweedie, ~treatments, type="response"); pwpm(onychiuridae.emm , adjust="none")
+# Define model object (you can swap in different ones)
+mod <- models_onychiuridae$tweedie
 
-# Generate CLD output
-cld_onychiuridae <- cld(onychiuridae.emm, Letters = letters, adjust = "none", sort = TRUE, reversed = TRUE)
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
 
-# Print the results
-cld_onychiuridae
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
 
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
 
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
 
 ```
+
+####Figure
 
 ```{r message=FALSE}
 ocs_invertebrates_clean |> 
-  left_join(cld_onychiuridae) |> 
-  ggplot(aes(x = factor(treatments, levels = c("HF", "LF", "EWM", "RT")), 
-             y = response, fill = treatments)) +
+  left_join(cld_results_lsd$system_entry) |> 
+  ggplot(aes(x = factor(system, levels = c("HF", "LF", "EWM", "RT")), 
+             y = response, fill = system)) +
+  facet_wrap(~entry, labeller = labeller(
+    entry = c("A" = "Entry Point A", "B" = "Entry Point B")
+  )) +
   geom_bar(stat = "identity", position = position_dodge()) + 
   geom_errorbar(aes(ymin = response - SE, ymax = response + SE), 
                 width = 0.2, position = position_dodge(0.9)) +
-  geom_text(aes(label = trimws(.group), y = response + SE + 0.75), 
+  geom_text(aes(label = trimws(.group), y = response + SE + 0.35), 
             size = 7) +
   labs(
     x = "",
@@ -267,7 +534,8 @@ ocs_invertebrates_clean |>
   )
 ggsave("onychiuridae_kg.png", width = 10, height = 6, dpi = 300)
 ```
-#####sminthuridae (not enough data)
+
+##Sminthuridae (not enough data)
 ```{r}
 models_sminthuridae <- test_glmm_models("sminthuridae", ocs_invertebrates_clean)
 
@@ -284,7 +552,7 @@ check_model(onychiuridae.tweedie)  # Works with `performance` package
 
 
 
-###total_mites, low zero inflation, treatment by entry is significant!
+###Mites, low zero inflation, treatment by entry is significant!
 ```{r}
 models_total_mites <- test_glmm_models("total_mites", ocs_invertebrates_clean)
 
@@ -294,13 +562,76 @@ models_total_mites <- test_glmm_models("total_mites", ocs_invertebrates_clean)
 ####anova (significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
-total_mites.binom1.anova <- test_terms(formula = total_mites ~ treatments * entry + block, # fixed effects go here
+total_mites.binom1.anova <- test_terms(formula = total_mites ~ system * entry + block, # fixed effects go here
                                            data = ocs_invertebrates_clean,
-                                   extra_formula = ~ (1|block:treatments), # random effects go here
+                                   extra_formula = ~ (1|block:system), # random effects go here
                                     fit_fun = glmmTMB,
                                    fit_arg = list(family=nbinom1(link="log"))); total_mites.binom1.anova # put the family you decided on in the fit_arg
 ```
+<br>
+####Means comparisons
+```{r}
+# Define model object (you can swap in different ones)
+mod <- models_total_mites$binom1 
 
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
 ```{r}
 # Then move on to post-hoc using emmeans if indicated by the ANOVA. 
 total_mites.emm <- emmeans(models_total_mites$binom1, ~treatments|entry, type="response"); pwpm(total_mites.emm , adjust="none")
@@ -350,10 +681,22 @@ ggsave("total_mites_kg.png", width = 10, height = 6, dpi = 300)
 ```
 
 
-#######total_astigmata, 
+
+
+
+
+
+
+
+
+
+
+
+
+###Astigmata, 
 ```{r}
 
-models_total_astigmata <- test_glmm_models("total_astigmata", ocs_invertebrates_clean)
+models_astigmata <- test_glmm_models("astigmata", ocs_invertebrates_clean)
 
 # Diagnostic residual plots (for best model selection)
 res.total_astigmata <- simulateResiduals(models_total_astigmata$poiss, n = 1000, integerResponse = FALSE)
@@ -366,11 +709,75 @@ check_model(models_total_astigmata$poiss)  # Works with `performance` package
 #######anova (significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
-total_astigmata.poiss.anova <- test_terms(formula = total_astigmata ~ treatments * entry + block, # fixed effects go here
+total_astigmata.tweedie.anova <- test_terms(formula = astigmata ~ system * entry + block, # fixed effects go here
                                            data = ocs_invertebrates_clean,
-                                   extra_formula = ~ (1|block:treatments), # random effects go here
+                                   extra_formula = ~ (1|block:system), # random effects go here
                                     fit_fun = glmmTMB,
-                                   fit_arg = list(family=poisson(link="log"))); total_astigmata.poiss.anova # put the family you decided on in the fit_arg
+                                   fit_arg = list(family=tweedie(link="log"))); total_astigmata.tweedie.anova # put the family you decided on in the fit_arg
+```
+<br>
+####Means comparisons
+```{r}
+# Define model object (you can swap in different ones)
+mod <- models_astigmata$tweedie
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
 ```
 
 ```{r}
@@ -423,10 +830,10 @@ ggsave("total_astigmata_kg.png", width = 10, height = 6, dpi = 300)
 
 
 
-#######total_mesostigmata, Treatment by Entry is significant
+#Mesostigmata, Treatment by Entry is significant
 ```{r}
 
-models_total_mesostigmata <- test_glmm_models("total_mesostigmata", ocs_invertebrates_clean)
+models_mesostigmata <- test_glmm_models("mesostigmata", ocs_invertebrates_clean)
 
 # Diagnostic residual plots (for best model selection)
 res.total_mesostigmata <- simulateResiduals(models_total_mesostigmata$tweedie, n = 1000, integerResponse = FALSE)
@@ -437,14 +844,83 @@ check_model(models_total_mesostigmata$tweedie)  # Works with `performance` packa
 
 
 ```
+###anova
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
-total_mesostigmata.tweedie.anova <- test_terms(formula = total_mesostigmata ~ treatments * entry + block, # fixed effects go here
+total_mesostigmata.tweedie.anova <- test_terms(formula = mesostigmata ~ system * entry + block, # fixed effects go here
                                            data = ocs_invertebrates_clean,
-                                   extra_formula = ~ (1|block:treatments), # random effects go here
+                                   extra_formula = ~ (1|block:system), # random effects go here
                                     fit_fun = glmmTMB,
                                    fit_arg = list(family=tweedie(link="log"))); total_mesostigmata.tweedie.anova# put the family you decided on in the fit_arg
 ```
+
+<br>
+####Means comparisons
+```{r}
+# Define model object (you can swap in different ones)
+mod <- models_mesostigmata$tweedie
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+
+
 
 ```{r}
 # Then move on to post-hoc using emmeans if indicated by the ANOVA. 
@@ -492,31 +968,102 @@ ocs_invertebrates_clean |>
   )
 ggsave("total_mesostigmata_kg.png", width = 10, height = 6, dpi = 300)
 ```
-#######total_oribatida, Not significant
+##oribatida, Not significant
 
 ```{r}
-models_total_oribatida <- test_glmm_models("total_oribatida", ocs_invertebrates_clean)
+models_oribatida <- test_glmm_models("oribatida", ocs_invertebrates_clean)
 
 # Diagnostic residual plots (for best model selection)
 res.total_oribatida <- simulateResiduals(models_total_oribatida$tweedie, n = 1000, integerResponse = FALSE)
 plot(res.total_oribatida)
 
-# Check overall model fit visually
-check_model(models_total_oribatida$tweedie)  # Works with `performance` package
+sim_residuals <- simulateResiduals(models_oribatida$zi_tweedie, plot = TRUE)
+testZeroInflation(sim_residuals)
 
 
 ```
 ######anova (not significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
-total_oribatida.binom1.anova <- test_terms(formula = total_oribatida ~ treatments * entry + block, # fixed effects go here
-                                           data = ocs_invertebrates_clean,
-                                   extra_formula = ~ (1|block:treatments), # random effects go here
-                                    fit_fun = glmmTMB,
-                                   fit_arg = list(family=nbinom1(link="log"))); total_oribatida.binom1.anova# put the family you decided on in the fit_arg
+oribatida.zi_tweedie.anova <- test_terms(
+  formula     = oribatida ~ system * entry + block,
+  data        = ocs_invertebrates_clean,
+  extra_formula = ~ (1 | block:system),
+  fit_fun     = glmmTMB,
+  fit_arg     = list(
+    family     = tweedie(link = "log"),
+    ziformula  = ~ 1
+  )
+)
+oribatida.zi_tweedie.anova
+```
+<br>
+####Means comparisons
+```{r}
+# Define model object (you can swap in different ones)
+mod <- models_oribatida$zi_tweedie
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
 ```
 
-#######phoretic_hypopi, 
+
+##Phoretic_hypopi, 
 
 ```{r}
 models_phoretic_hypopi <- test_glmm_models("phoretic_hypopi", ocs_invertebrates_clean)
@@ -526,12 +1073,80 @@ models_phoretic_hypopi <- test_glmm_models("phoretic_hypopi", ocs_invertebrates_
 ####Anova (almost significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
-phoretic_hypopi.binom1.anova <- test_terms(formula = phoretic_hypopi ~ treatments * entry + block, # fixed effects go here
+phoretic_hypopi.tweedie.anova <- test_terms(formula = phoretic_hypopi ~ system * entry + block, # fixed effects go here
                                            data = ocs_invertebrates_clean,
-                                           extra_formula = ~ (1|block:treatments), # random effects go here
+                                           extra_formula = ~ (1|block:system), # random effects go here
                                            fit_fun = glmmTMB,
-                                           fit_arg = list(family=nbinom1(link="log"))); phoretic_hypopi.binom1.anova # put the family you decided on in the fit_arg
+                                           fit_arg = list(family=tweedie(link="log"))); phoretic_hypopi.tweedie.anova # put the family you decided on in the fit_arg
 ```
+
+<br>
+####Means comparisons
+```{r}
+# Define model object (you can swap in different ones)
+mod <- models_phoretic_hypopi$tweedie
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
+
+```
+
+
+
 ```{r}
 # Then move on to post-hoc using emmeans if indicated by the ANOVA. 
 phoretic_hypopi.emm <- emmeans(models_phoretic_hypopi$binom1, ~treatments|entry, type="response"); pwpm(phoretic_hypopi.emm , adjust="none")
@@ -628,4 +1243,818 @@ models_total_oribatida <- test_glmm_models("total_oribatida", ocs_invertebrates_
 
 
 ```
+#T-tests
+##Total_organisms
+```{r}
 
+
+# Load the data
+
+ocs_invertebrates_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_invertebrates_kg.xlsx")
+ocs_invertebrates_raw$block <- as.factor(ocs_invertebrates_raw$block)
+ocs_invertebrates_raw$entry <- as.factor(ocs_invertebrates_raw$entry)
+ocs_invertebrates_raw$system <- as.factor(ocs_invertebrates_raw$system)
+
+# Step 1: Create subsets
+alley_data <- ocs_invertebrates_raw %>% filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw %>% filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw %>% filter(!system %in% c("Alley", "Corn"))
+
+# Subset
+alley_data <- ocs_invertebrates_raw |> filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw |> filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(total_organisms, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_organisms, na.rm = TRUE),
+    p_value = t.test(alley_data$total_organisms, total_organisms)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(total_organisms, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_organisms, na.rm = TRUE),
+    p_value = t.test(alley_data$total_organisms, total_organisms)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(total_organisms, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_organisms, na.rm = TRUE),
+    p_value = t.test(alley_data$total_organisms, total_organisms)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(total_organisms, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_organisms, na.rm = TRUE),
+    p_value = t.test(corn_data$total_organisms, total_organisms)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(total_organisms, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_organisms, na.rm = TRUE),
+    p_value = t.test(corn_data$total_organisms, total_organisms)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(total_organisms, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_organisms, na.rm = TRUE),
+    p_value = t.test(corn_data$total_organisms, total_organisms)$p.value,
+    .groups = "drop"
+  )
+
+# View tables
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+tibble(
+  alley_mean = mean(alley_data$total_organisms, na.rm = TRUE),
+  corn_mean  = mean(corn_data$total_organisms, na.rm = TRUE),
+  p_value    = t.test(alley_data$total_organisms, corn_data$total_organisms)$p.value
+)
+
+```
+
+##Total_collembola
+```{r}
+
+
+# Load the data
+
+ocs_invertebrates_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_invertebrates_kg.xlsx")
+ocs_invertebrates_raw$block <- as.factor(ocs_invertebrates_raw$block)
+ocs_invertebrates_raw$entry <- as.factor(ocs_invertebrates_raw$entry)
+ocs_invertebrates_raw$system <- as.factor(ocs_invertebrates_raw$system)
+
+# Step 1: Create subsets
+alley_data <- ocs_invertebrates_raw %>% filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw %>% filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw %>% filter(!system %in% c("Alley", "Corn"))
+
+# Subset
+alley_data <- ocs_invertebrates_raw |> filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw |> filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(total_collembola, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_collembola, na.rm = TRUE),
+    p_value = t.test(alley_data$total_collembola, total_collembola)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(total_collembola, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_collembola, na.rm = TRUE),
+    p_value = t.test(alley_data$total_collembola, total_collembola)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(total_collembola, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_collembola, na.rm = TRUE),
+    p_value = t.test(alley_data$total_collembola, total_collembola)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(total_collembola, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_collembola, na.rm = TRUE),
+    p_value = t.test(corn_data$total_collembola, total_collembola)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(total_collembola, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_collembola, na.rm = TRUE),
+    p_value = t.test(corn_data$total_collembola, total_collembola)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(total_collembola, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_collembola, na.rm = TRUE),
+    p_value = t.test(corn_data$total_collembola, total_collembola)$p.value,
+    .groups = "drop"
+  )
+
+# View tables
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+tibble(
+  alley_mean = mean(alley_data$total_organisms, na.rm = TRUE),
+  corn_mean  = mean(corn_data$total_organisms, na.rm = TRUE),
+  p_value    = t.test(alley_data$total_organisms, corn_data$total_organisms)$p.value
+)
+
+```
+
+##Onychiuridae
+```{r}
+
+
+# Load the data
+
+ocs_invertebrates_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_invertebrates_kg.xlsx")
+ocs_invertebrates_raw$block <- as.factor(ocs_invertebrates_raw$block)
+ocs_invertebrates_raw$entry <- as.factor(ocs_invertebrates_raw$entry)
+ocs_invertebrates_raw$system <- as.factor(ocs_invertebrates_raw$system)
+
+# Step 1: Create subsets
+alley_data <- ocs_invertebrates_raw %>% filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw %>% filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw %>% filter(!system %in% c("Alley", "Corn"))
+
+# Subset
+alley_data <- ocs_invertebrates_raw |> filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw |> filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(onychiuridae, na.rm = TRUE),
+    alley_mean = mean(alley_data$onychiuridae, na.rm = TRUE),
+    p_value = t.test(alley_data$onychiuridae, onychiuridae)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(onychiuridae, na.rm = TRUE),
+    alley_mean = mean(alley_data$onychiuridae, na.rm = TRUE),
+    p_value = t.test(alley_data$onychiuridae, onychiuridae)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(onychiuridae, na.rm = TRUE),
+    alley_mean = mean(alley_data$onychiuridae, na.rm = TRUE),
+    p_value = t.test(alley_data$onychiuridae, onychiuridae)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(onychiuridae, na.rm = TRUE),
+    corn_mean = mean(corn_data$onychiuridae, na.rm = TRUE),
+    p_value = t.test(corn_data$onychiuridae, onychiuridae)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(onychiuridae, na.rm = TRUE),
+    corn_mean = mean(corn_data$onychiuridae, na.rm = TRUE),
+    p_value = t.test(corn_data$onychiuridae, onychiuridae)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(onychiuridae, na.rm = TRUE),
+    corn_mean = mean(corn_data$onychiuridae, na.rm = TRUE),
+    p_value = t.test(corn_data$onychiuridae, onychiuridae)$p.value,
+    .groups = "drop"
+  )
+
+# View tables
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+tibble(
+  alley_mean = mean(alley_data$onychiuridae, na.rm = TRUE),
+  corn_mean  = mean(corn_data$onychiuridae, na.rm = TRUE),
+  p_value    = t.test(alley_data$onychiuridae, corn_data$onychiuridae)$p.value
+)
+
+```
+
+##Isotomidae
+```{r}
+
+
+# Load the data
+
+ocs_invertebrates_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_invertebrates_kg.xlsx")
+ocs_invertebrates_raw$block <- as.factor(ocs_invertebrates_raw$block)
+ocs_invertebrates_raw$entry <- as.factor(ocs_invertebrates_raw$entry)
+ocs_invertebrates_raw$system <- as.factor(ocs_invertebrates_raw$system)
+
+# Step 1: Create subsets
+alley_data <- ocs_invertebrates_raw %>% filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw %>% filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw %>% filter(!system %in% c("Alley", "Corn"))
+
+# Subset
+alley_data <- ocs_invertebrates_raw |> filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw |> filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(isotomidae, na.rm = TRUE),
+    alley_mean = mean(alley_data$isotomidae, na.rm = TRUE),
+    p_value = t.test(alley_data$isotomidae, cur_data()$isotomidae)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(isotomidae, na.rm = TRUE),
+    alley_mean = mean(alley_data$isotomidae, na.rm = TRUE),
+    p_value = t.test(alley_data$isotomidae, cur_data()$isotomidae)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(isotomidae, na.rm = TRUE),
+    alley_mean = mean(alley_data$isotomidae, na.rm = TRUE),
+    p_value = t.test(alley_data$isotomidae, cur_data()$isotomidae)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(isotomidae, na.rm = TRUE),
+    corn_mean = mean(corn_data$isotomidae, na.rm = TRUE),
+    p_value = t.test(corn_data$isotomidae, cur_data()$isotomidae)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(isotomidae, na.rm = TRUE),
+    corn_mean = mean(corn_data$isotomidae, na.rm = TRUE),
+    p_value = t.test(corn_data$isotomidae, cur_data()$isotomidae)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(isotomidae, na.rm = TRUE),
+    corn_mean = mean(corn_data$isotomidae, na.rm = TRUE),
+    p_value = t.test(corn_data$isotomidae, cur_data()$isotomidae)$p.value,
+    .groups = "drop"
+  )
+
+# View tables
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+tibble(
+  alley_mean = mean(alley_data$isotomidae, na.rm = TRUE),
+  corn_mean  = mean(corn_data$isotomidae, na.rm = TRUE),
+  p_value    = t.test(alley_data$isotomidae, corn_data$isotomidae)$p.value
+)
+
+```
+##Total mites
+```{r}
+
+
+# Load the data
+
+ocs_invertebrates_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_invertebrates_kg.xlsx")
+ocs_invertebrates_raw$block <- as.factor(ocs_invertebrates_raw$block)
+ocs_invertebrates_raw$entry <- as.factor(ocs_invertebrates_raw$entry)
+ocs_invertebrates_raw$system <- as.factor(ocs_invertebrates_raw$system)
+
+# Step 1: Create subsets
+alley_data <- ocs_invertebrates_raw %>% filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw %>% filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw %>% filter(!system %in% c("Alley", "Corn"))
+
+# Subset
+alley_data <- ocs_invertebrates_raw |> filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw |> filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(total_mites, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_mites, na.rm = TRUE),
+    p_value = t.test(alley_data$total_mites, cur_data()$total_mites)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(total_mites, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_mites, na.rm = TRUE),
+    p_value = t.test(alley_data$total_mites, cur_data()$total_mites)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(total_mites, na.rm = TRUE),
+    alley_mean = mean(alley_data$total_mites, na.rm = TRUE),
+    p_value = t.test(alley_data$total_mites, cur_data()$total_mites)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(total_mites, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_mites, na.rm = TRUE),
+    p_value = t.test(corn_data$total_mites, cur_data()$total_mites)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(total_mites, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_mites, na.rm = TRUE),
+    p_value = t.test(corn_data$total_mites, cur_data()$total_mites)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(total_mites, na.rm = TRUE),
+    corn_mean = mean(corn_data$total_mites, na.rm = TRUE),
+    p_value = t.test(corn_data$total_mites, cur_data()$total_mites)$p.value,
+    .groups = "drop"
+  )
+
+# View tables
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+tibble(
+  alley_mean = mean(alley_data$total_mites, na.rm = TRUE),
+  corn_mean  = mean(corn_data$total_mites, na.rm = TRUE),
+  p_value    = t.test(alley_data$total_mites, corn_data$total_mites)$p.value
+)
+
+```
+
+##Astigmata
+```{r}
+
+
+# Load the data
+
+ocs_invertebrates_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_invertebrates_kg.xlsx")
+ocs_invertebrates_raw$block <- as.factor(ocs_invertebrates_raw$block)
+ocs_invertebrates_raw$entry <- as.factor(ocs_invertebrates_raw$entry)
+ocs_invertebrates_raw$system <- as.factor(ocs_invertebrates_raw$system)
+
+# Step 1: Create subsets
+alley_data <- ocs_invertebrates_raw %>% filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw %>% filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw %>% filter(!system %in% c("Alley", "Corn"))
+
+# Subset
+alley_data <- ocs_invertebrates_raw |> filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw |> filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(astigmata, na.rm = TRUE),
+    alley_mean = mean(alley_data$astigmata, na.rm = TRUE),
+    p_value = t.test(alley_data$astigmata, cur_data()$astigmata)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(astigmata, na.rm = TRUE),
+    alley_mean = mean(alley_data$astigmata, na.rm = TRUE),
+    p_value = t.test(alley_data$astigmata, cur_data()$astigmata)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(astigmata, na.rm = TRUE),
+    alley_mean = mean(alley_data$astigmata, na.rm = TRUE),
+    p_value = t.test(alley_data$astigmata, cur_data()$astigmata)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(astigmata, na.rm = TRUE),
+    corn_mean = mean(corn_data$astigmata, na.rm = TRUE),
+    p_value = t.test(corn_data$astigmata, cur_data()$astigmata)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(astigmata, na.rm = TRUE),
+    corn_mean = mean(corn_data$astigmata, na.rm = TRUE),
+    p_value = t.test(corn_data$astigmata, cur_data()$astigmata)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(astigmata, na.rm = TRUE),
+    corn_mean = mean(corn_data$astigmata, na.rm = TRUE),
+    p_value = t.test(corn_data$astigmata, cur_data()$astigmata)$p.value,
+    .groups = "drop"
+  )
+
+# View tables
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+tibble(
+  alley_mean = mean(alley_data$astigmata, na.rm = TRUE),
+  corn_mean  = mean(corn_data$astigmata, na.rm = TRUE),
+  p_value    = t.test(alley_data$astigmata, corn_data$astigmata)$p.value
+)
+
+```
+
+##Mesostigmata
+```{r}
+
+
+# Load the data
+
+ocs_invertebrates_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_invertebrates_kg.xlsx")
+ocs_invertebrates_raw$block <- as.factor(ocs_invertebrates_raw$block)
+ocs_invertebrates_raw$entry <- as.factor(ocs_invertebrates_raw$entry)
+ocs_invertebrates_raw$system <- as.factor(ocs_invertebrates_raw$system)
+
+# Step 1: Create subsets
+alley_data <- ocs_invertebrates_raw %>% filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw %>% filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw %>% filter(!system %in% c("Alley", "Corn"))
+
+# Subset
+alley_data <- ocs_invertebrates_raw |> filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw |> filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(mesostigmata, na.rm = TRUE),
+    alley_mean = mean(alley_data$mesostigmata, na.rm = TRUE),
+    p_value = t.test(alley_data$mesostigmata, cur_data()$mesostigmata)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(mesostigmata, na.rm = TRUE),
+    alley_mean = mean(alley_data$mesostigmata, na.rm = TRUE),
+    p_value = t.test(alley_data$mesostigmata, cur_data()$mesostigmata)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(mesostigmata, na.rm = TRUE),
+    alley_mean = mean(alley_data$mesostigmata, na.rm = TRUE),
+    p_value = t.test(alley_data$mesostigmata, cur_data()$mesostigmata)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(mesostigmata, na.rm = TRUE),
+    corn_mean = mean(corn_data$mesostigmata, na.rm = TRUE),
+    p_value = t.test(corn_data$mesostigmata, cur_data()$mesostigmata)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(mesostigmata, na.rm = TRUE),
+    corn_mean = mean(corn_data$mesostigmata, na.rm = TRUE),
+    p_value = t.test(corn_data$mesostigmata, cur_data()$mesostigmata)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(mesostigmata, na.rm = TRUE),
+    corn_mean = mean(corn_data$mesostigmata, na.rm = TRUE),
+    p_value = t.test(corn_data$mesostigmata, cur_data()$mesostigmata)$p.value,
+    .groups = "drop"
+  )
+
+# View tables
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+tibble(
+  alley_mean = mean(alley_data$mesostigmata, na.rm = TRUE),
+  corn_mean  = mean(corn_data$mesostigmata, na.rm = TRUE),
+  p_value    = t.test(alley_data$mesostigmata, corn_data$mesostigmata)$p.value
+)
+
+```
+
+##Phoretic hypopi
+```{r}
+
+
+# Load the data
+
+ocs_invertebrates_raw <- read_excel("~/Github/OCS_microarthropods/raw-data/ocs_invertebrates_kg.xlsx")
+ocs_invertebrates_raw$block <- as.factor(ocs_invertebrates_raw$block)
+ocs_invertebrates_raw$entry <- as.factor(ocs_invertebrates_raw$entry)
+ocs_invertebrates_raw$system <- as.factor(ocs_invertebrates_raw$system)
+
+# Step 1: Create subsets
+alley_data <- ocs_invertebrates_raw %>% filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw %>% filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw %>% filter(!system %in% c("Alley", "Corn"))
+
+# Subset
+alley_data <- ocs_invertebrates_raw |> filter(system == "Alley")
+corn_data  <- ocs_invertebrates_raw |> filter(system == "Corn")
+treatment_data <- ocs_invertebrates_raw |> filter(!system %in% c("Alley", "Corn"))
+
+## ---- ALLEYWAY COMPARISONS ----
+
+# a. Alley vs each cropping system
+alley_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(phoretic_hypopi, na.rm = TRUE),
+    alley_mean = mean(alley_data$phoretic_hypopi, na.rm = TRUE),
+    p_value = t.test(alley_data$phoretic_hypopi, cur_data()$phoretic_hypopi)$p.value,
+    .groups = "drop"
+  )
+
+# b. Alley vs each entry point
+alley_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(phoretic_hypopi, na.rm = TRUE),
+    alley_mean = mean(alley_data$phoretic_hypopi, na.rm = TRUE),
+    p_value = t.test(alley_data$phoretic_hypopi, cur_data()$phoretic_hypopi)$p.value,
+    .groups = "drop"
+  )
+
+# c. Alley vs system x entry
+alley_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(phoretic_hypopi, na.rm = TRUE),
+    alley_mean = mean(alley_data$phoretic_hypopi, na.rm = TRUE),
+    p_value = t.test(alley_data$phoretic_hypopi, cur_data()$phoretic_hypopi)$p.value,
+    .groups = "drop"
+  )
+
+## ---- CORN FIELD COMPARISONS ----
+
+# a. Corn vs each cropping system
+corn_vs_system <- ocs_invertebrates_raw |>
+  group_by(system) |>
+  summarise(
+    treatment_mean = mean(phoretic_hypopi, na.rm = TRUE),
+    corn_mean = mean(corn_data$phoretic_hypopi, na.rm = TRUE),
+    p_value = t.test(corn_data$phoretic_hypopi, cur_data()$phoretic_hypopi)$p.value,
+    .groups = "drop"
+  )
+
+# b. Corn vs each entry point
+corn_vs_entry <- ocs_invertebrates_raw |>
+  group_by(entry) |>
+  summarise(
+    treatment_mean = mean(phoretic_hypopi, na.rm = TRUE),
+    corn_mean = mean(corn_data$phoretic_hypopi, na.rm = TRUE),
+    p_value = t.test(corn_data$phoretic_hypopi, cur_data()$phoretic_hypopi)$p.value,
+    .groups = "drop"
+  )
+
+# c. Corn vs system x entry
+corn_vs_sys_entry <- ocs_invertebrates_raw |>
+  group_by(system, entry) |>
+  summarise(
+    treatment_mean = mean(phoretic_hypopi, na.rm = TRUE),
+    corn_mean = mean(corn_data$phoretic_hypopi, na.rm = TRUE),
+    p_value = t.test(corn_data$phoretic_hypopi, cur_data()$phoretic_hypopi)$p.value,
+    .groups = "drop"
+  )
+
+# View tables
+alley_vs_system
+alley_vs_entry
+alley_vs_sys_entry
+
+corn_vs_system
+corn_vs_entry
+corn_vs_sys_entry
+
+tibble(
+  alley_mean = mean(alley_data$phoretic_hypopi, na.rm = TRUE),
+  corn_mean  = mean(corn_data$phoretic_hypopi, na.rm = TRUE),
+  p_value    = t.test(alley_data$phoretic_hypopi, corn_data$phoretic_hypopi)$p.value
+)
+
+```
