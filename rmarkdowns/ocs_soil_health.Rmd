@@ -268,13 +268,24 @@ cld_results$system_entry
 
 ```{r}
 
-pred_water_capacity.beta <- glmmTMB(pred_water_capacity ~ system * entry + block + (1 | block:system),
-                                    data = ocs_soil_health_clean,
-                                    family = beta_family())
+pred_water_capacity.gauss<- glmmTMB(pred_water_capacity~ system* entry + block + (1 | block:system),
+                      data = ocs_soil_health_clean,
+                      family = gaussian())
 
-simulateResiduals(pred_water_capacity.beta,plot = TRUE) 
+pred_water_capacity.gamma <- glmmTMB(pred_water_capacity~ system * entry + block + (1 | block:system),
+                                     data = ocs_soil_health_clean,
+                                     family = Gamma(link = "log"))
 
-check_model(pred_water_capacity.beta)
+
+#look at the AIC
+AIC(pred_water_capacity.gauss,pred_water_capacity.gamma )
+
+
+
+
+simulateResiduals(pred_water_capacity.gamma,plot = TRUE) 
+
+check_model(pred_water_capacity.gamma)
 
 
 ```
@@ -288,7 +299,7 @@ pred_water_capacity.anova <- test_terms(formula = pred_water_capacity~ system * 
                                    data = ocs_soil_health_clean,
                                    extra_formula = ~ (1|block:system), # random effects go here
                                    fit_fun = glmmTMB,
-                                   fit_arg = list(family = beta_family()));pred_water_capacity.anova 
+                                   fit_arg = list(family = Gamma(link = "log")));pred_water_capacity.anova 
 
 
 ```
@@ -297,7 +308,7 @@ pred_water_capacity.anova <- test_terms(formula = pred_water_capacity~ system * 
 
 ```{r}
 # Define model object (you can swap in different ones)
-mod <- pred_water_capacity.beta
+mod <- pred_water_capacity.gamma
 
 # Create a named list of comparisons and corresponding CLDs
 library(emmeans)
@@ -447,7 +458,7 @@ subsurface_hardness.gauss<- glmmTMB(subsurface_hardness~ system* entry + block +
                       data = ocs_soil_health_clean,
                       family = gaussian())
 
-subsurface_hardness.gamma <- glmmTMB(surface_hardness~ system * entry + block + (1 | block:system),
+subsurface_hardness.gamma <- glmmTMB(subsurface_hardness~ system * entry + block + (1 | block:system),
                                      data = ocs_soil_health_clean,
                                      family = Gamma(link = "log"))
 
@@ -477,7 +488,7 @@ subsurface_hardness.anova <- test_terms(formula = subsurface_hardness~ system * 
                                    data = ocs_soil_health_clean,
                                    extra_formula = ~ (1|block:system), # random effects go here
                                    fit_fun = glmmTMB,
-                                   fit_arg = list(family = gaussian()));subsurface_hardness.anova 
+                                   fit_arg = list(family = Gamma(link = "log")));subsurface_hardness.anova 
 
                                
 ```
@@ -486,7 +497,7 @@ subsurface_hardness.anova <- test_terms(formula = subsurface_hardness~ system * 
 
 ```{r}
 # Define model object (you can swap in different ones)
-mod <- subsurface_hardness.gauss
+mod <- subsurface_hardness.gamma
 
 # Tukey HSD pairwise comparisons
 tukey_results <- list(
