@@ -5045,7 +5045,7 @@ alley_vs_corn <- tibble(
   corn_log_mean  = mean(corn_data$log_s, na.rm = TRUE),
   alley_mean = exp(alley_log_mean),
   corn_mean  = exp(corn_log_mean),
-  p_value    = t.test(alley_data$log_s, corn_data$log_s)$p.value
+  p_value    = t.test(alley_data$log_s, corn_data$log_)$p.value
 )
 
 ## ---- OUTPUT ----

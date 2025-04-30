@@ -13649,9 +13649,13 @@ alley_vs_corn <- tibble(
   corn_log_mean  = mean(corn_data$log_s, na.rm = TRUE),
   alley_mean = exp(alley_log_mean),
   corn_mean  = exp(corn_log_mean),
-  p_value    = t.test(alley_data$log_s, corn_data$log_s)$p.value
+  p_value    = t.test(alley_data$log_s, corn_data$log_)$p.value
 )
+```
 
+    ## Warning: Unknown or uninitialised column: `log_`.
+
+``` r
 ## ---- OUTPUT ----
 
 alley_vs_system
@@ -13737,4 +13741,4 @@ alley_vs_corn
     ## # A tibble: 1 × 5
     ##   alley_log_mean corn_log_mean alley_mean corn_mean p_value
     ##            <dbl>         <dbl>      <dbl>     <dbl>   <dbl>
-    ## 1           1.05          1.16       2.87      3.20   0.441
+    ## 1           1.05          1.16       2.87      3.20 0.00281
