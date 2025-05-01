@@ -38,7 +38,7 @@ ocs_invertebrates_raw$block <- as.factor(ocs_invertebrates_raw$block)
 ocs_invertebrates_raw$entry <- as.factor(ocs_invertebrates_raw$entry)
 ocs_invertebrates_raw$system <- as.factor(ocs_invertebrates_raw$system)
 ocs_invertebrates_raw <- ocs_invertebrates_raw |> 
-  mutate(across(where(is.numeric), round))
+  mutate(across(where(is.numeric),round))
 
 
 kable(head(ocs_invertebrates_raw))
@@ -61,51 +61,91 @@ kable(head(ocs_invertebrates_clean))
 ##Model testing
 
 ```{r}
-# Function to fit models and run diagnostics for a given response variable
-test_glmm_models <- function(response_var, data) {
+ test_glmm_models <- function(response_var, data) {
   
-  # Define model formulas
+  # Check for variation in the response variable
+  if (var(data[[response_var]], na.rm = TRUE) == 0) {
+    stop(paste("No variation in response variable:", response_var))
+  }
+  
+  # Define model formula
   formula <- as.formula(paste(response_var, "~ system * entry + block + (1 | block:system)"))
   
-  # Fit models with different distributions
+  # Safe model fitting
+  safe_glmmTMB <- function(...) {
+    tryCatch(glmmTMB(...), error = function(e) NULL)
+  }
+  
+  # Fit models
   models <- list(
-    binom1 = glmmTMB(formula, family = nbinom1(link = "log"), data = data),
-    binom2 = glmmTMB(formula, family = nbinom2(link = "log"), data = data),
-    poiss = glmmTMB(formula, family = poisson(link = "log"), data = data),
-    tweedie = glmmTMB(formula, family = tweedie(link = "log"), data = data),
-    zi = glmmTMB(formula, family = nbinom1(link = "log"), ziformula = ~1, data = data),
-    zi_tweedie = glmmTMB(formula, family = tweedie(link = "log"), ziformula = ~1, data = data)  # NEW MODEL
+    binom1      = safe_glmmTMB(formula, family = nbinom1(link = "log"), data = data),
+    binom2      = safe_glmmTMB(formula, family = nbinom2(link = "log"), data = data),
+    poiss       = safe_glmmTMB(formula, family = poisson(link = "log"), data = data),
+    tweedie     = safe_glmmTMB(formula, family = tweedie(link = "log"), data = data),
+    zi          = safe_glmmTMB(formula, family = nbinom1(link = "log"), ziformula = ~1, data = data),
+    zi_tweedie  = safe_glmmTMB(formula, family = tweedie(link = "log"), ziformula = ~1, data = data)
   )
+  
+  # Collect AICs
+  aic_table <- data.frame(
+    Model = character(),
+    AIC = numeric(),
+    stringsAsFactors = FALSE
+  )
+  
+  for (model_name in names(models)) {
+    model <- models[[model_name]]
+    aic_val <- tryCatch(AIC(model), error = function(e) NA)
+    aic_table <- rbind(aic_table, data.frame(Model = model_name, AIC = aic_val))
+  }
+  
+  # Order by AIC and get the two best models
+  aic_table <- aic_table[order(aic_table$AIC), ]
+  best_models <- head(aic_table$Model, 2)
+  
+  # Initialize full diagnostics table
+  diagnostics <- aic_table
+  diagnostics$Dispersion <- NA
+  diagnostics$ZeroInfl_p <- NA
+  
+  # Run diagnostics only on top 2 models
+  for (model_name in best_models) {
+    model <- models[[model_name]]
+    if (!is.null(model)) {
+      dispersion <- tryCatch({
+        res <- residuals(model, type = "pearson")
+        round(sum(res^2) / df.residual(model), 2)
+      }, error = function(e) NA)
+      
+      zi_p <- tryCatch({
+        sim <- simulateResiduals(model, plot = FALSE)
+        testZeroInflation(sim, plot = FALSE)$p.value
+      }, error = function(e) NA)
+      
+      diagnostics[diagnostics$Model == model_name, "Dispersion"] <- dispersion
+      diagnostics[diagnostics$Model == model_name, "ZeroInfl_p"] <- zi_p
+    }
+  }
 
-  # Overdispersion check (using nbinom1)
-  resid_pearson <- residuals(models$binom1, type = "pearson")
-  dispersion_ratio <- sum(resid_pearson^2) / df.residual(models$binom1)
-  cat("\n--- Overdispersion Check for", response_var, "---\n")
-  cat("Dispersion Ratio:", round(dispersion_ratio, 2), "\n")
+  cat("\n--- Model Diagnostics for", response_var, "---\n")
+  print(diagnostics)
   
-  # Zero inflation test
-  sim_residuals <- simulateResiduals(models$binom1)
-  zi_test <- testZeroInflation(sim_residuals)
-  cat("Zero Inflation Test p-value:", zi_test$p.value, "\n")
-  
-  # Compare models using AIC
-  aic_results <- AIC(models$binom1, models$binom2, models$poiss, models$tweedie, models$zi, models$zi_tweedie)  # UPDATED
-  print(aic_results)
-
-  # Plot residual diagnostics
-  plot(sim_residuals)
-  
-  # Check model fit visually
-  check_model(models$binom1)  # Still using binom1 as your base for diagnostics
-  
-  return(models)  # Return all models
+  return(list(models = models, diagnostics = diagnostics))
 }
 
 ```
-###Organisms
+###Total organisms
 
 ```{r}
 models_total_organisms <- test_glmm_models("total_organisms", ocs_invertebrates_clean)
+
+```
+```{r}
+simulateResiduals(models_total_organisms$models$binom1, plot = TRUE)
+check_model(models_total_organisms$models$binom1)
+simulateResiduals(models_total_organisms$models$tweedie, plot = TRUE)
+check_model(models_total_organisms$models$tweedie)
+
 
 ```
 
@@ -123,7 +163,7 @@ total_organisms.binom1.anova <- test_terms(formula = total_organisms ~ system * 
 ####Means comparisons
 ```{r}
 # Define model object (you can swap in different ones)
-mod <- models_total_organisms$binom1 
+mod <- models_total_organisms$models$binom1
 
 # Tukey HSD pairwise comparisons
 tukey_results <- list(
@@ -221,27 +261,37 @@ ggsave("total_organisms_kg.png", width = 10, height = 6, dpi = 300)
 
 <br>
 
-###Collembola
+###COLLEMBOLA
 
 ```{r}
 models_total_collembola <- test_glmm_models("total_collembola", ocs_invertebrates_clean)
+
+
+
 ```
+```{r}
+simulateResiduals(models_total_collembola$models$binom1, plot = TRUE)
+check_model(models_total_collembola$models$binom1)
+simulateResiduals(models_total_collembola$models$tweedie, plot = TRUE)
+check_model(models_total_collembola$models$tweedie)
+```
+
 
 ####Anova (not significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
-total_collembola.binom1.anova <- test_terms(formula = total_collembola ~ system * entry + block, # fixed effects go here
+total_collembola.tweedie.anova <- test_terms(formula = total_collembola ~ system * entry + block, # fixed effects go here
                                            data = ocs_invertebrates_clean,
                                            extra_formula = ~ (1|block:system), # random effects go here
                                            fit_fun = glmmTMB,
-                                           fit_arg = list(family=nbinom1(link="log"))); total_collembola.binom1.anova # put the family you decided on in the fit_arg
+                                           fit_arg = list(family=tweedie(link="log"))); total_collembola.tweedie.anova # put the family you decided on in the fit_arg
 ```
 <br>
 
 ####Means comparisons
 ```{r}
 # Define model object (you can swap in different ones)
-mod <- models_total_collembola$binom1 
+mod <- models_total_collembola$models$tweedie
 
 # Tukey HSD pairwise comparisons
 tukey_results <- list(
@@ -304,21 +354,96 @@ cld_results_lsd$system_entry
 
 <br>
 
-###Entomobryidae (Too little data for now)
+####Entomobryidae (Too little data for now)
 ```{r}
 models_entomobryidae <- test_glmm_models("entomobryidae", ocs_invertebrates_clean)
 
-sum(ocs_invertebrates_clean$entomobryidae == 0)  # Observed zeros
 
-ocs_invertebrates_clean$log_entomo <- log(ocs_invertebrates_clean$entomobryidae + 1)
-lm_model <- lm(log_entomo ~ system * entry + block, data = ocs_invertebrates_clean)
-summary(lm_model)
+```
+```{r}
+simulateResiduals(models_entomobryidae$models$binom1, plot = TRUE)
+check_model(models_entomobryidae$models$binom1)
+simulateResiduals(models_entomobryidae$models$binom2, plot = TRUE)
+check_model(models_entomobryidae$modelsbinom2)
+```
+
+#####Anova
+```{r}
+# `test_terms` is from monet and allows for a Type III anova for glmmTMB
+entomobryidae.nbinom1.anova <- test_terms(formula = entomobryidae ~ system * entry + block, # fixed effects go here
+                                           data = ocs_invertebrates_clean,
+                                           extra_formula = ~ (1|block:system), # random effects go here
+                                           fit_fun = glmmTMB,
+                                           fit_arg = list(family=nbinom1(link="log"))); entomobryidae.nbinom1.anova # put the family you decided on in the fit_arg
+```
+<br>
+
+#####Means comparisons
+```{r}
+# Define model object (you can swap in different ones)
+mod <- models_entomobryidae$models$binom1
+
+
+# Tukey HSD pairwise comparisons
+tukey_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "tukey", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "tukey", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "tukey", type = "response")
+)
+
+# Fisher LSD (no adjustment)
+lsd_results <- list(
+  entry = emmeans(mod, pairwise ~ entry, adjust = "none", type = "response"),
+  system = emmeans(mod, pairwise ~ system, adjust = "none", type = "response"),
+  system_entry = emmeans(mod, list(pairwise ~ system | entry), adjust = "none", type = "response")
+)
+
+# CLDs for Tukey
+cld_results_tukey <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "tukey", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "tukey", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "tukey", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# CLDs for Fisher LSD
+cld_results_lsd <- list(
+  entry = cld(emmeans(mod, ~entry), adjust = "none", type = "response", 
+              Letters = letters, sort = TRUE, reversed = TRUE),
+  system = cld(emmeans(mod, ~system), adjust = "none", type = "response", 
+               Letters = letters, sort = TRUE, reversed = TRUE),
+  system_entry = cld(emmeans(mod, ~system | entry), adjust = "none", type = "response", 
+                     Letters = letters, sort = TRUE, reversed = TRUE)
+)
+
+# Example: Accessing outputs
+# Tukey
+tukey_results$entry$emmeans
+tukey_results$system$emmeans
+tukey_results$system_entry$emmeans
+tukey_results$entry$contrasts
+tukey_results$system$contrasts
+tukey_results$system_entry$contrasts
+cld_results_tukey$entry
+cld_results_tukey$system
+cld_results_tukey$system_entry
+
+# LSD
+lsd_results$entry$emmeans
+lsd_results$system$emmeans
+lsd_results$system_entry$emmeans
+lsd_results$entry$contrasts
+lsd_results$system$contrasts
+lsd_results$system_entry$contrasts
+cld_results_lsd$entry
+cld_results_lsd$system
+cld_results_lsd$system_entry
 
 ```
 
-<br>
-
-###Isotomidae 
+####Isotomidae 
 ```{r}
 models_isotomidae <- test_glmm_models("isotomidae", ocs_invertebrates_clean)
 
@@ -326,7 +451,15 @@ models_isotomidae <- test_glmm_models("isotomidae", ocs_invertebrates_clean)
 
 <br>
 
-####anova (not significant)
+```{r}
+simulateResiduals(models_isotomidae$models$tweedie, plot = TRUE)
+check_model(models_isotomidae$models$tweedie)
+simulateResiduals(models_isotomidae$models$zi_tweedie, plot = TRUE)
+check_model(models_isotomidae$models$zi_tweedie)
+```
+
+<br>
+#####anova (not significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
 isotomidae.tweedie.anova <- test_terms(formula = isotomidae ~ system * entry + block, # fixed effects go here
@@ -337,10 +470,10 @@ isotomidae.tweedie.anova <- test_terms(formula = isotomidae ~ system * entry + b
 ```
 <br>
 
-####Means comparisons
+#####Means comparisons
 ```{r}
 # Define model object (you can swap in different ones)
-mod <- models_isotomidae$tweedie 
+mod <- models_isotomidae$models$tweedie 
 
 # Tukey HSD pairwise comparisons
 tukey_results <- list(
@@ -402,22 +535,19 @@ cld_results_lsd$system_entry
 ```
 <br>
 
-###Onychiuridae (treatment is significant)
+####Onychiuridae (treatment is significant)
 
 
 ```{r}
-models_onychiuridae  <- test_glmm_models("onychiuridae ", ocs_invertebrates_clean)
-
-
-# Diagnostic residual plots (for best model selection)
-res.onychiuridae <- simulateResiduals(onychiuridae.tweedie, n = 1000, integerResponse = FALSE)
-plot(res.onychiuridae)
-
-# Check overall model fit visually
-check_model(models_onychiuridae$zi_tweedie)  # Works with `performance` package
+models_onychiuridae <- test_glmm_models("onychiuridae", ocs_invertebrates_clean)
 
 ```
-
+```{r}
+simulateResiduals(models_isotomidae$models$zi_tweedie, plot = TRUE)
+check_model(models_isotomidae$models$zi_tweedie)
+simulateResiduals(models_isotomidae$models$tweedie, plot = TRUE)
+check_model(models_isotomidae$models$tweedie)
+```
 
 ######anova (significant)
 ```{r}
@@ -435,10 +565,10 @@ onychiuridae.tweedie.anova <- test_terms(
 
 onychiuridae.tweedie.anova
 ```
-####Means comparisons
+#####Means comparisons
 ```{r}
 # Define model object (you can swap in different ones)
-mod <- models_onychiuridae$tweedie
+mod <- models_onychiuridae$models$tweedie
 
 # Tukey HSD pairwise comparisons
 tukey_results <- list(
@@ -499,7 +629,7 @@ cld_results_lsd$system_entry
 
 ```
 
-####Figure
+#####Figure
 
 ```{r message=FALSE}
 ocs_invertebrates_clean |> 
@@ -535,44 +665,62 @@ ocs_invertebrates_clean |>
 ggsave("onychiuridae_kg.png", width = 10, height = 6, dpi = 300)
 ```
 
-##Sminthuridae (not enough data)
+####Sminthuridae (not enough data)
 ```{r}
 models_sminthuridae <- test_glmm_models("sminthuridae", ocs_invertebrates_clean)
 
-# Diagnostic residual plots (for best model selection)
-res.onychiuridae <- simulateResiduals(onychiuridae.tweedie, n = 1000, integerResponse = FALSE)
-plot(res.onychiuridae)
-
-# Check overall model fit visually
-check_model(onychiuridae.tweedie)  # Works with `performance` package
-
+```
+```{r}
+simulateResiduals(models_sminthuridae$models$zi_tweedie, plot = TRUE)
+check_model(models_isotomidae$models$zi_tweedie)
+simulateResiduals(models_sminthuridae$models$binom1, plot = TRUE)
+check_model(models_isotomidae$models$tweedie)
 ```
 
 
+#####Anova
+```{r}
+# `test_terms` is from monet and allows for a Type III anova for glmmTMB
+sminthuridae.nbinom1.anova <- test_terms(formula = sminthuridae ~ system * entry + block, # fixed effects go here
+                                           data = ocs_invertebrates_clean,
+                                           extra_formula = ~ (1|block:system), # random effects go here
+                                           fit_fun = glmmTMB,
+                                           fit_arg = list(family=nbinom1(link="log"))); sminthuridae.nbinom1.anova # put the family you decided on in the fit_arg
+```
 
 
-
-###Mites, low zero inflation, treatment by entry is significant!
+###ACARI
 ```{r}
 models_total_mites <- test_glmm_models("total_mites", ocs_invertebrates_clean)
 
 
 ```
+<br>
+```{r}
+simulateResiduals(models_total_mites$models$tweedie, plot = TRUE)
+check_model(models_total_mites$models$tweedie)
+simulateResiduals(models_total_mites$models$zi_tweedie, plot = TRUE)
+check_model(models_total_mites$models$zi_tweedie)
+simulateResiduals(models_total_mites$models$zi, plot = TRUE)
+check_model(models_total_mites$models$zi)
 
+```
+
+<br>
 ####anova (significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
-total_mites.binom1.anova <- test_terms(formula = total_mites ~ system * entry + block, # fixed effects go here
+total_mites.tweedie.anova <- test_terms(formula = total_mites ~ system * entry + block, # fixed effects go here
                                            data = ocs_invertebrates_clean,
                                    extra_formula = ~ (1|block:system), # random effects go here
                                     fit_fun = glmmTMB,
-                                   fit_arg = list(family=nbinom1(link="log"))); total_mites.binom1.anova # put the family you decided on in the fit_arg
+                                   fit_arg = list(family=tweedie(link="log"))); total_mites.tweedie.anova # put the family you decided on in the fit_arg
 ```
 <br>
 ####Means comparisons
 ```{r}
 # Define model object (you can swap in different ones)
-mod <- models_total_mites$binom1 
+mod <- models_total_mites$models$tweedie
 
 # Tukey HSD pairwise comparisons
 tukey_results <- list(
@@ -632,25 +780,15 @@ cld_results_lsd$system
 cld_results_lsd$system_entry
 
 ```
-```{r}
-# Then move on to post-hoc using emmeans if indicated by the ANOVA. 
-total_mites.emm <- emmeans(models_total_mites$binom1, ~treatments|entry, type="response"); pwpm(total_mites.emm , adjust="none")
 
-# Generate CLD output
-cld_total_mites <- cld(total_mites.emm, Letters = letters, adjust = "none", sort = TRUE, reversed = TRUE)
+<br>
 
-# Print the results
-cld_total_mites
-
-
-```
-
-
+####Figure
 ```{r message=FALSE}
 ocs_invertebrates_clean |> 
-  left_join(cld_total_mites) |> 
-  ggplot(aes(x = factor(treatments, levels = c("HF", "LF", "EWM", "RT")), 
-             y = response, fill = treatments)) +
+  left_join(cld_results_lsd$system_entry) |> 
+  ggplot(aes(x = factor(system, levels = c("HF", "LF", "EWM", "RT")), 
+             y = response, fill = system)) +
   facet_wrap(~entry, labeller = labeller(
     entry = c("A" = "Entry Point A", "B" = "Entry Point B")
   )) +
@@ -662,7 +800,7 @@ ocs_invertebrates_clean |>
   labs(
     x = "",
     y = expression("Density" ~ (individuals ~ kg^{-1} ~ "dry soil")),
-    subtitle = expression(italic("P < 0.005"))
+    subtitle = expression(italic("P < 0.001"))
   ) +
   scale_x_discrete(labels = c("High\nfertility", "Low\nfertility", 
                               "Enhanced\nweed\nmanagement", "Reduced\ntillage")) +
@@ -693,20 +831,27 @@ ggsave("total_mites_kg.png", width = 10, height = 6, dpi = 300)
 
 
 
-###Astigmata, 
+####Astigmata, 
 ```{r}
 
 models_astigmata <- test_glmm_models("astigmata", ocs_invertebrates_clean)
 
-# Diagnostic residual plots (for best model selection)
-res.total_astigmata <- simulateResiduals(models_total_astigmata$poiss, n = 1000, integerResponse = FALSE)
-plot(res.total_astigmata)
-
-# Check overall model fit visually
-check_model(models_total_astigmata$poiss)  # Works with `performance` package
 
 ```
-#######anova (significant)
+
+<br>
+
+```{r}
+simulateResiduals(models_astigmata$models$tweedie, plot = TRUE)
+check_model(models_astigmata$models$tweedie)
+simulateResiduals(models_astigmata$models$zi_tweedie, plot = TRUE)
+check_model(models_astigmata$models$zi_tweedie)
+simulateResiduals(models_astigmata$models$zi, plot = TRUE)
+check_model(models_astigmata$models$zi)
+
+```
+
+#####anova (significant)
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
 total_astigmata.tweedie.anova <- test_terms(formula = astigmata ~ system * entry + block, # fixed effects go here
@@ -716,10 +861,10 @@ total_astigmata.tweedie.anova <- test_terms(formula = astigmata ~ system * entry
                                    fit_arg = list(family=tweedie(link="log"))); total_astigmata.tweedie.anova # put the family you decided on in the fit_arg
 ```
 <br>
-####Means comparisons
+#####Means comparisons
 ```{r}
 # Define model object (you can swap in different ones)
-mod <- models_astigmata$tweedie
+mod <- models_astigmata$models$tweedie
 
 # Tukey HSD pairwise comparisons
 tukey_results <- list(
@@ -780,36 +925,24 @@ cld_results_lsd$system_entry
 
 ```
 
-```{r}
-# Then move on to post-hoc using emmeans if indicated by the ANOVA. 
-total_astigmata.emm <- emmeans(models_total_astigmata$poiss, ~treatments|entry, type="response"); pwpm(total_astigmata.emm , adjust="none")
-
-# Generate CLD output
-cld_total_astigmata <- cld(total_astigmata.emm, Letters = letters, adjust = "none", sort = TRUE, reversed = TRUE)
-
-# Print the results
-cld_total_astigmata
-
-
-```
-
+#####Figures
 ```{r message=FALSE}
 ocs_invertebrates_clean |> 
-  left_join(cld_total_astigmata) |> 
-  ggplot(aes(x = factor(treatments, levels = c("HF", "LF", "EWM", "RT")), 
-             y = rate, fill = treatments)) +
+  left_join(cld_results_lsd$system_entry) |> 
+  ggplot(aes(x = factor(system, levels = c("HF", "LF", "EWM", "RT")), 
+             y = response, fill = system)) +
   facet_wrap(~entry, labeller = labeller(
     entry = c("A" = "Entry Point A", "B" = "Entry Point B")
   )) +
   geom_bar(stat = "identity", position = position_dodge()) + 
-  geom_errorbar(aes(ymin = rate - SE, ymax = rate + SE), 
+  geom_errorbar(aes(ymin = response - SE, ymax = response + SE), 
                 width = 0.2, position = position_dodge(0.9)) +
-  geom_text(aes(label = trimws(.group), y = rate + SE + 1), 
+  geom_text(aes(label = trimws(.group), y = response + SE + 1), 
             size = 7) +
   labs(
     x = "",
     y = expression("Density" ~ (individuals ~ kg^{-1} ~ "dry soil")),
-    subtitle = expression(italic("P < 0.005"))
+    subtitle = expression(italic("P < 0.001"))
   ) +
   scale_x_discrete(labels = c("High\nfertility", "Low\nfertility", 
                               "Enhanced\nweed\nmanagement", "Reduced\ntillage")) +
@@ -827,7 +960,7 @@ ocs_invertebrates_clean |>
 ggsave("total_astigmata_kg.png", width = 10, height = 6, dpi = 300)
 ```
 
-
+<br>
 
 
 #Mesostigmata, Treatment by Entry is significant
@@ -835,16 +968,19 @@ ggsave("total_astigmata_kg.png", width = 10, height = 6, dpi = 300)
 
 models_mesostigmata <- test_glmm_models("mesostigmata", ocs_invertebrates_clean)
 
-# Diagnostic residual plots (for best model selection)
-res.total_mesostigmata <- simulateResiduals(models_total_mesostigmata$tweedie, n = 1000, integerResponse = FALSE)
-plot(res.total_mesostigmata)
+```
+<br>
 
-# Check overall model fit visually
-check_model(models_total_mesostigmata$tweedie)  # Works with `performance` package
+```{r}
+simulateResiduals(models_mesostigmata$models$tweedie, plot = TRUE)
+check_model(models_mesostigmata$models$tweedie)
+simulateResiduals(models_mesostigmata$models$zi_tweedie, plot = TRUE)
+check_model(models_mesostigmata$models$zi_tweedie)
 
 
 ```
-###anova
+
+####anova
 ```{r}
 # `test_terms` is from monet and allows for a Type III anova for glmmTMB
 total_mesostigmata.tweedie.anova <- test_terms(formula = mesostigmata ~ system * entry + block, # fixed effects go here
@@ -855,10 +991,12 @@ total_mesostigmata.tweedie.anova <- test_terms(formula = mesostigmata ~ system *
 ```
 
 <br>
+
+
 ####Means comparisons
 ```{r}
 # Define model object (you can swap in different ones)
-mod <- models_mesostigmata$tweedie
+mod <- models_mesostigmata$models$tweedie
 
 # Tukey HSD pairwise comparisons
 tukey_results <- list(
